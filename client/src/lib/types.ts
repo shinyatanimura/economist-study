@@ -1,6 +1,7 @@
 // ============================================================
 // The Economist Study App - データ型定義
 // Design: Editorial Brutalism
+// Structure: Week → Article → Sentence (段落レベルは廃止)
 // ============================================================
 
 export type WordMarkType = "unknown" | "unsure";
@@ -8,7 +9,7 @@ export type WordMarkType = "unknown" | "unsure";
 export interface MarkedWord {
   word: string;
   markType: WordMarkType;
-  sentenceIndex: number; // どの文の何番目の単語か
+  sentenceIndex: number;
   wordIndex: number;
 }
 
@@ -20,29 +21,23 @@ export interface VocabItem {
 export interface Sentence {
   english: string;
   japanese: string;
+  vocabulary: VocabItem[]; // 各文に紐づく語彙
 }
 
-export interface Paragraph {
-  id: string;
-  title: string; // 段落タイトル（例：「混迷を極めるトランプ大統領の対イラン政策」）
-  sentences: Sentence[];
-  vocabulary: VocabItem[];
-  markedWords: MarkedWord[];
-}
-
-export type ReviewMethod = "読む" | "聞く" | "書く" | "音読" | "その他";
+export type ReviewMethod = string; // 自由入力
 
 export interface ReviewRecord {
   id: string;
   date: string; // ISO 8601
-  method: ReviewMethod | string;
+  method: ReviewMethod;
   note?: string;
 }
 
 export interface Article {
   id: string;
   title: string;
-  paragraphs: Paragraph[];
+  sentences: Sentence[];
+  markedWords: MarkedWord[];
   reviewRecords: ReviewRecord[];
   createdAt: string;
 }

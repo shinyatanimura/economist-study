@@ -1,13 +1,17 @@
 // ============================================================
 // Sidebar - 週・記事ナビゲーション
 // Design: Editorial Brutalism - dark sidebar, deep charcoal bg
+// Changes:
+//   - 週に日付を表示
+//   - 新しい週が上に来るよう逆順表示
+//   - 削除前に確認ダイアログを挟む
 // ============================================================
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Trash2, BookOpen, Calendar, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Trash2, BookOpen, Calendar, AlertTriangle } from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -18,6 +22,16 @@ interface SidebarProps {
   selectedArticleId: string | null;
   onSelect: (weekId: string, articleId: string) => void;
   onSelectWeek: (weekId: string) => void;
+}
+
+function formatIssueDate(isoDate: string): string {
+  if (!isoDate) return "";
+  try {
+    const d = new Date(isoDate);
+    return d.toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+  } catch {
+    return isoDate;
+  }
 }
 
 export default function Sidebar({ selectedWeekId, selectedArticleId, onSelect, onSelectWeek }: SidebarProps) {
@@ -33,6 +47,14 @@ export default function Sidebar({ selectedWeekId, selectedArticleId, onSelect, o
   const [articleDialogOpen, setArticleDialogOpen] = useState(false);
   const [articleTitle, setArticleTitle] = useState("");
   const [targetWeekId, setTargetWeekId] = useState<string | null>(null);
+
+  // Delete confirmation
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    type: "week" | "article";
+    weekId: string;
+    articleId?: string;
+    label: string;
+  } | null>(null);
 
   const toggleWeek = (weekId: string) => {
     setExpandedWeeks((prev) => {
@@ -52,10 +74,16 @@ export default function Sidebar({ selectedWeekId, selectedArticleId, onSelect, o
     toast.success("週を追加しました");
   };
 
-  const handleDeleteWeek = (e: React.MouseEvent, weekId: string) => {
-    e.stopPropagation();
-    deleteWeek(weekId);
-    toast.success("週を削除しました");
+  const handleConfirmDelete = () => {
+    if (!deleteConfirm) return;
+    if (deleteConfirm.type === "week") {
+      deleteWeek(deleteConfirm.weekId);
+      toast.success("週を削除しました");
+    } else if (deleteConfirm.type === "article" && deleteConfirm.articleId) {
+      deleteArticle(deleteConfirm.weekId, deleteConfirm.articleId);
+      toast.success("記事を削除しました");
+    }
+    setDeleteConfirm(null);
   };
 
   const handleAddArticle = () => {
@@ -66,18 +94,15 @@ export default function Sidebar({ selectedWeekId, selectedArticleId, onSelect, o
     toast.success("記事を追加しました");
   };
 
-  const handleDeleteArticle = (e: React.MouseEvent, weekId: string, articleId: string) => {
-    e.stopPropagation();
-    deleteArticle(weekId, articleId);
-    toast.success("記事を削除しました");
-  };
-
   const openAddArticle = (e: React.MouseEvent, weekId: string) => {
     e.stopPropagation();
     setTargetWeekId(weekId);
     setArticleTitle("");
     setArticleDialogOpen(true);
   };
+
+  // 新しい週が上に来るよう逆順
+  const sortedWeeks = [...data.weeks].reverse();
 
   return (
     <aside className="w-64 shrink-0 h-screen sticky top-0 flex flex-col overflow-hidden" style={{ background: "oklch(0.18 0.01 60)" }}>
@@ -96,13 +121,13 @@ export default function Sidebar({ selectedWeekId, selectedArticleId, onSelect, o
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-3 px-2">
-        {data.weeks.length === 0 && (
+        {sortedWeeks.length === 0 && (
           <p className="text-xs px-2 py-4 text-center" style={{ color: "oklch(0.5 0.01 60)" }}>
             週を追加して<br />学習を始めましょう
           </p>
         )}
 
-        {data.weeks.map((week: Week) => {
+        {sortedWeeks.map((week: Week) => {
           const isExpanded = expandedWeeks.has(week.id);
           const isSelectedWeek = selectedWeekId === week.id;
 
@@ -110,23 +135,33 @@ export default function Sidebar({ selectedWeekId, selectedArticleId, onSelect, o
             <div key={week.id} className="mb-1">
               {/* Week row */}
               <div
-                className={`flex items-center gap-1 px-2 py-2 rounded cursor-pointer group transition-colors ${isSelectedWeek ? "bg-[oklch(0.25_0.01_60)]" : "hover:bg-[oklch(0.22_0.01_60)]"}`}
+                className={`flex items-start gap-1 px-2 py-2 rounded cursor-pointer group transition-colors ${isSelectedWeek ? "bg-[oklch(0.25_0.01_60)]" : "hover:bg-[oklch(0.22_0.01_60)]"}`}
                 onClick={() => {
                   toggleWeek(week.id);
                   onSelectWeek(week.id);
                 }}
               >
-                <span style={{ color: "oklch(0.55 0.01 60)" }}>
+                <span className="mt-0.5 shrink-0" style={{ color: "oklch(0.55 0.01 60)" }}>
                   {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </span>
-                <Calendar size={13} style={{ color: "oklch(0.42 0.18 25)", flexShrink: 0 }} />
-                <span className="flex-1 text-sm truncate font-medium" style={{ color: "oklch(0.88 0.005 80)", fontFamily: "var(--font-ui)" }}>
-                  {week.label}
-                </span>
+                <Calendar size={13} className="mt-0.5 shrink-0" style={{ color: "oklch(0.42 0.18 25)" }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate leading-tight" style={{ color: "oklch(0.88 0.005 80)", fontFamily: "var(--font-ui)" }}>
+                    {week.label}
+                  </p>
+                  {week.issueDate && (
+                    <p className="text-xs mt-0.5" style={{ color: "oklch(0.52 0.01 60)", fontFamily: "var(--font-ui)" }}>
+                      {formatIssueDate(week.issueDate)}
+                    </p>
+                  )}
+                </div>
                 <button
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:text-red-400"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded mt-0.5 shrink-0"
                   style={{ color: "oklch(0.55 0.01 60)" }}
-                  onClick={(e) => handleDeleteWeek(e, week.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteConfirm({ type: "week", weekId: week.id, label: week.label });
+                  }}
                   title="週を削除"
                 >
                   <Trash2 size={12} />
@@ -157,9 +192,12 @@ export default function Sidebar({ selectedWeekId, selectedArticleId, onSelect, o
                           {article.title}
                         </span>
                         <button
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:text-red-400"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded"
                           style={{ color: "oklch(0.5 0.01 60)" }}
-                          onClick={(e) => handleDeleteArticle(e, week.id, article.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirm({ type: "article", weekId: week.id, articleId: article.id, label: article.title });
+                          }}
                           title="記事を削除"
                         >
                           <Trash2 size={11} />
@@ -248,6 +286,27 @@ export default function Sidebar({ selectedWeekId, selectedArticleId, onSelect, o
           <DialogFooter>
             <Button variant="outline" onClick={() => setArticleDialogOpen(false)}>キャンセル</Button>
             <Button onClick={handleAddArticle} disabled={!articleTitle.trim()}>追加</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle size={18} className="text-destructive" />
+              削除の確認
+            </DialogTitle>
+            <DialogDescription>
+              {deleteConfirm?.type === "week"
+                ? `「${deleteConfirm.label}」とその中の全記事・段落を削除します。この操作は取り消せません。`
+                : `「${deleteConfirm?.label}」を削除します。この操作は取り消せません。`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>キャンセル</Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>削除する</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

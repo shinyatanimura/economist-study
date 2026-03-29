@@ -1,10 +1,10 @@
 // ============================================================
 // The Economist Study App - アプリデータコンテキスト
-// Design: Editorial Brutalism
+// Structure: Week → Article → Sentence (段落レベルは廃止)
 // ============================================================
 
 import React, { createContext, useContext, useState, useCallback } from "react";
-import type { AppData, MarkedWord, ReviewRecord } from "@/lib/types";
+import type { AppData, Week, Article, Sentence, MarkedWord, ReviewRecord } from "@/lib/types";
 import {
   loadData,
   saveData,
@@ -14,31 +14,26 @@ import {
   addArticle,
   updateArticle,
   deleteArticle,
-  addParagraph,
-  updateParagraph,
-  deleteParagraph,
+  setSentences,
   toggleMarkedWord,
   addReviewRecord,
   deleteReviewRecord,
 } from "@/lib/storage";
-import type { Paragraph } from "@/lib/types";
 
 interface AppContextValue {
   data: AppData;
   // Week
   addWeek: (label: string, issueDate: string) => void;
-  updateWeek: (weekId: string, patch: Partial<Pick<import("@/lib/types").Week, "label" | "issueDate">>) => void;
+  updateWeek: (weekId: string, patch: Partial<Pick<Week, "label" | "issueDate">>) => void;
   deleteWeek: (weekId: string) => void;
   // Article
   addArticle: (weekId: string, title: string) => void;
-  updateArticle: (weekId: string, articleId: string, patch: Partial<Pick<import("@/lib/types").Article, "title">>) => void;
+  updateArticle: (weekId: string, articleId: string, patch: Partial<Pick<Article, "title" | "sentences" | "markedWords">>) => void;
   deleteArticle: (weekId: string, articleId: string) => void;
-  // Paragraph
-  addParagraph: (weekId: string, articleId: string, paragraph: Omit<Paragraph, "id" | "markedWords">) => void;
-  updateParagraph: (weekId: string, articleId: string, paragraphId: string, patch: Partial<Paragraph>) => void;
-  deleteParagraph: (weekId: string, articleId: string, paragraphId: string) => void;
+  // Sentences
+  setSentences: (weekId: string, articleId: string, sentences: Sentence[]) => void;
   // Marked words
-  toggleMarkedWord: (weekId: string, articleId: string, paragraphId: string, word: MarkedWord) => void;
+  toggleMarkedWord: (weekId: string, articleId: string, word: MarkedWord) => void;
   // Review records
   addReviewRecord: (weekId: string, articleId: string, record: Omit<ReviewRecord, "id">) => void;
   deleteReviewRecord: (weekId: string, articleId: string, recordId: string) => void;
@@ -62,10 +57,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addArticle: (weekId, title) => update(addArticle(data, weekId, title)),
     updateArticle: (weekId, articleId, patch) => update(updateArticle(data, weekId, articleId, patch)),
     deleteArticle: (weekId, articleId) => update(deleteArticle(data, weekId, articleId)),
-    addParagraph: (weekId, articleId, paragraph) => update(addParagraph(data, weekId, articleId, paragraph)),
-    updateParagraph: (weekId, articleId, paragraphId, patch) => update(updateParagraph(data, weekId, articleId, paragraphId, patch)),
-    deleteParagraph: (weekId, articleId, paragraphId) => update(deleteParagraph(data, weekId, articleId, paragraphId)),
-    toggleMarkedWord: (weekId, articleId, paragraphId, word) => update(toggleMarkedWord(data, weekId, articleId, paragraphId, word)),
+    setSentences: (weekId, articleId, sentences) => update(setSentences(data, weekId, articleId, sentences)),
+    toggleMarkedWord: (weekId, articleId, word) => update(toggleMarkedWord(data, weekId, articleId, word)),
     addReviewRecord: (weekId, articleId, record) => update(addReviewRecord(data, weekId, articleId, record)),
     deleteReviewRecord: (weekId, articleId, recordId) => update(deleteReviewRecord(data, weekId, articleId, recordId)),
   };

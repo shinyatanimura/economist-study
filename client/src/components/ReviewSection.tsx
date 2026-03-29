@@ -1,6 +1,7 @@
 // ============================================================
 // ReviewSection - 復習チェック記録コンポーネント
 // Design: Editorial Brutalism
+// - 復習方法は自由入力
 // ============================================================
 
 import { useState } from "react";
@@ -9,13 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useApp } from "@/contexts/AppContext";
 import type { Article, Week, ReviewRecord } from "@/lib/types";
-
-const REVIEW_METHODS = ["読む", "聞く", "書く", "音読", "その他"];
 
 interface ReviewSectionProps {
   week: Week;
@@ -35,20 +33,23 @@ function formatTime(isoString: string): string {
 export default function ReviewSection({ week, article }: ReviewSectionProps) {
   const { addReviewRecord, deleteReviewRecord } = useApp();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [method, setMethod] = useState<string>("読む");
-  const [customMethod, setCustomMethod] = useState("");
+  const [method, setMethod] = useState("");
   const [note, setNote] = useState("");
-  const [dateStr, setDateStr] = useState(() => new Date().toISOString().slice(0, 16));
+  const [dateStr, setDateStr] = useState(() => {
+    const now = new Date();
+    // datetime-local 形式 (YYYY-MM-DDTHH:mm)
+    return now.toISOString().slice(0, 16);
+  });
 
   const handleAdd = () => {
-    const finalMethod = method === "その他" ? customMethod.trim() || "その他" : method;
+    if (!method.trim()) return;
     addReviewRecord(week.id, article.id, {
       date: new Date(dateStr).toISOString(),
-      method: finalMethod,
+      method: method.trim(),
       note: note.trim() || undefined,
     });
+    setMethod("");
     setNote("");
-    setCustomMethod("");
     setDialogOpen(false);
     toast.success("復習を記録しました");
   };
@@ -58,7 +59,16 @@ export default function ReviewSection({ week, article }: ReviewSectionProps) {
     toast.success("記録を削除しました");
   };
 
-  // Group by date
+  const openDialog = () => {
+    // 毎回現在時刻をセット
+    const now = new Date();
+    setDateStr(now.toISOString().slice(0, 16));
+    setMethod("");
+    setNote("");
+    setDialogOpen(true);
+  };
+
+  // 日付でグループ化（新しい順）
   const grouped: { [date: string]: ReviewRecord[] } = {};
   [...article.reviewRecords]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -79,7 +89,7 @@ export default function ReviewSection({ week, article }: ReviewSectionProps) {
             いつ、どのように復習したかを記録します
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} className="gap-2" size="sm">
+        <Button onClick={openDialog} className="gap-2" size="sm">
           <Plus size={13} /> 記録を追加
         </Button>
       </div>
@@ -90,7 +100,7 @@ export default function ReviewSection({ week, article }: ReviewSectionProps) {
           <p className="text-muted-foreground text-sm" style={{ fontFamily: "var(--font-ui)" }}>
             復習の記録がありません
           </p>
-          <Button variant="outline" size="sm" className="mt-4 gap-2" onClick={() => setDialogOpen(true)}>
+          <Button variant="outline" size="sm" className="mt-4 gap-2" onClick={openDialog}>
             <Plus size={13} /> 最初の復習を記録
           </Button>
         </div>
@@ -160,24 +170,12 @@ export default function ReviewSection({ week, article }: ReviewSectionProps) {
             </div>
             <div className="space-y-1.5">
               <Label>復習方法</Label>
-              <Select value={method} onValueChange={setMethod}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {REVIEW_METHODS.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {method === "その他" && (
-                <Input
-                  value={customMethod}
-                  onChange={(e) => setCustomMethod(e.target.value)}
-                  placeholder="復習方法を入力"
-                  className="mt-2"
-                />
-              )}
+              <Input
+                value={method}
+                onChange={(e) => setMethod(e.target.value)}
+                placeholder="例：読む、音読、聞く、書く など"
+                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>メモ（任意）</Label>
@@ -192,7 +190,7 @@ export default function ReviewSection({ week, article }: ReviewSectionProps) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
-            <Button onClick={handleAdd}>記録</Button>
+            <Button onClick={handleAdd} disabled={!method.trim()}>記録</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,8 +1,9 @@
 // ============================================================
 // The Economist Study App - LocalStorage 永続化ユーティリティ
+// Structure: Week → Article → Sentence (段落レベルは廃止)
 // ============================================================
 
-import type { AppData, Week, Article, Paragraph, MarkedWord, ReviewRecord } from "./types";
+import type { AppData, Week, Article, Sentence, MarkedWord, ReviewRecord } from "./types";
 import { nanoid } from "nanoid";
 
 const STORAGE_KEY = "economist-study-data";
@@ -24,20 +25,12 @@ export function saveData(data: AppData): void {
 // ---- Week operations ----
 
 export function addWeek(data: AppData, label: string, issueDate: string): AppData {
-  const week: Week = {
-    id: nanoid(),
-    label,
-    issueDate,
-    articles: [],
-  };
+  const week: Week = { id: nanoid(), label, issueDate, articles: [] };
   return { ...data, weeks: [...data.weeks, week] };
 }
 
 export function updateWeek(data: AppData, weekId: string, patch: Partial<Pick<Week, "label" | "issueDate">>): AppData {
-  return {
-    ...data,
-    weeks: data.weeks.map((w) => (w.id === weekId ? { ...w, ...patch } : w)),
-  };
+  return { ...data, weeks: data.weeks.map((w) => (w.id === weekId ? { ...w, ...patch } : w)) };
 }
 
 export function deleteWeek(data: AppData, weekId: string): AppData {
@@ -50,7 +43,8 @@ export function addArticle(data: AppData, weekId: string, title: string): AppDat
   const article: Article = {
     id: nanoid(),
     title,
-    paragraphs: [],
+    sentences: [],
+    markedWords: [],
     reviewRecords: [],
     createdAt: new Date().toISOString(),
   };
@@ -62,17 +56,17 @@ export function addArticle(data: AppData, weekId: string, title: string): AppDat
   };
 }
 
-export function updateArticle(data: AppData, weekId: string, articleId: string, patch: Partial<Pick<Article, "title">>): AppData {
+export function updateArticle(
+  data: AppData,
+  weekId: string,
+  articleId: string,
+  patch: Partial<Pick<Article, "title" | "sentences" | "markedWords">>
+): AppData {
   return {
     ...data,
     weeks: data.weeks.map((w) =>
       w.id === weekId
-        ? {
-            ...w,
-            articles: w.articles.map((a) =>
-              a.id === articleId ? { ...a, ...patch } : a
-            ),
-          }
+        ? { ...w, articles: w.articles.map((a) => (a.id === articleId ? { ...a, ...patch } : a)) }
         : w
     ),
   };
@@ -82,77 +76,15 @@ export function deleteArticle(data: AppData, weekId: string, articleId: string):
   return {
     ...data,
     weeks: data.weeks.map((w) =>
-      w.id === weekId
-        ? { ...w, articles: w.articles.filter((a) => a.id !== articleId) }
-        : w
+      w.id === weekId ? { ...w, articles: w.articles.filter((a) => a.id !== articleId) } : w
     ),
   };
 }
 
-// ---- Paragraph operations ----
+// ---- Sentence operations ----
 
-export function addParagraph(data: AppData, weekId: string, articleId: string, paragraph: Omit<Paragraph, "id" | "markedWords">): AppData {
-  const newParagraph: Paragraph = {
-    ...paragraph,
-    id: nanoid(),
-    markedWords: [],
-  };
-  return {
-    ...data,
-    weeks: data.weeks.map((w) =>
-      w.id === weekId
-        ? {
-            ...w,
-            articles: w.articles.map((a) =>
-              a.id === articleId
-                ? { ...a, paragraphs: [...a.paragraphs, newParagraph] }
-                : a
-            ),
-          }
-        : w
-    ),
-  };
-}
-
-export function updateParagraph(data: AppData, weekId: string, articleId: string, paragraphId: string, patch: Partial<Paragraph>): AppData {
-  return {
-    ...data,
-    weeks: data.weeks.map((w) =>
-      w.id === weekId
-        ? {
-            ...w,
-            articles: w.articles.map((a) =>
-              a.id === articleId
-                ? {
-                    ...a,
-                    paragraphs: a.paragraphs.map((p) =>
-                      p.id === paragraphId ? { ...p, ...patch } : p
-                    ),
-                  }
-                : a
-            ),
-          }
-        : w
-    ),
-  };
-}
-
-export function deleteParagraph(data: AppData, weekId: string, articleId: string, paragraphId: string): AppData {
-  return {
-    ...data,
-    weeks: data.weeks.map((w) =>
-      w.id === weekId
-        ? {
-            ...w,
-            articles: w.articles.map((a) =>
-              a.id === articleId
-                ? { ...a, paragraphs: a.paragraphs.filter((p) => p.id !== paragraphId) }
-                : a
-            ),
-          }
-        : w
-    ),
-  };
+export function setSentences(data: AppData, weekId: string, articleId: string, sentences: Sentence[]): AppData {
+  return updateArticle(data, weekId, articleId, { sentences });
 }
 
 // ---- Marked word operations ----
@@ -161,7 +93,6 @@ export function toggleMarkedWord(
   data: AppData,
   weekId: string,
   articleId: string,
-  paragraphId: string,
   word: MarkedWord
 ): AppData {
   return {
@@ -170,38 +101,31 @@ export function toggleMarkedWord(
       w.id === weekId
         ? {
             ...w,
-            articles: w.articles.map((a) =>
-              a.id === articleId
-                ? {
-                    ...a,
-                    paragraphs: a.paragraphs.map((p) => {
-                      if (p.id !== paragraphId) return p;
-                      const existing = p.markedWords.find(
-                        (m) => m.sentenceIndex === word.sentenceIndex && m.wordIndex === word.wordIndex
-                      );
-                      if (!existing) {
-                        return { ...p, markedWords: [...p.markedWords, word] };
-                      } else if (existing.markType === "unknown") {
-                        return {
-                          ...p,
-                          markedWords: p.markedWords.map((m) =>
-                            m.sentenceIndex === word.sentenceIndex && m.wordIndex === word.wordIndex
-                              ? { ...m, markType: "unsure" as const }
-                              : m
-                          ),
-                        };
-                      } else {
-                        return {
-                          ...p,
-                          markedWords: p.markedWords.filter(
-                            (m) => !(m.sentenceIndex === word.sentenceIndex && m.wordIndex === word.wordIndex)
-                          ),
-                        };
-                      }
-                    }),
-                  }
-                : a
-            ),
+            articles: w.articles.map((a) => {
+              if (a.id !== articleId) return a;
+              const existing = a.markedWords.find(
+                (m) => m.sentenceIndex === word.sentenceIndex && m.wordIndex === word.wordIndex
+              );
+              if (!existing) {
+                return { ...a, markedWords: [...a.markedWords, word] };
+              } else if (existing.markType === "unknown") {
+                return {
+                  ...a,
+                  markedWords: a.markedWords.map((m) =>
+                    m.sentenceIndex === word.sentenceIndex && m.wordIndex === word.wordIndex
+                      ? { ...m, markType: "unsure" as const }
+                      : m
+                  ),
+                };
+              } else {
+                return {
+                  ...a,
+                  markedWords: a.markedWords.filter(
+                    (m) => !(m.sentenceIndex === word.sentenceIndex && m.wordIndex === word.wordIndex)
+                  ),
+                };
+              }
+            }),
           }
         : w
     ),
@@ -210,7 +134,12 @@ export function toggleMarkedWord(
 
 // ---- Review record operations ----
 
-export function addReviewRecord(data: AppData, weekId: string, articleId: string, record: Omit<ReviewRecord, "id">): AppData {
+export function addReviewRecord(
+  data: AppData,
+  weekId: string,
+  articleId: string,
+  record: Omit<ReviewRecord, "id">
+): AppData {
   const newRecord: ReviewRecord = { ...record, id: nanoid() };
   return {
     ...data,
@@ -229,7 +158,12 @@ export function addReviewRecord(data: AppData, weekId: string, articleId: string
   };
 }
 
-export function deleteReviewRecord(data: AppData, weekId: string, articleId: string, recordId: string): AppData {
+export function deleteReviewRecord(
+  data: AppData,
+  weekId: string,
+  articleId: string,
+  recordId: string
+): AppData {
   return {
     ...data,
     weeks: data.weeks.map((w) =>
