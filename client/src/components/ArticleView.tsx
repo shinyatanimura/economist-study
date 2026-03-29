@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import SentenceCard from "./SentenceCard";
 import ReviewSection from "./ReviewSection";
+import VocabTest from "./VocabTest";
 import { useApp } from "@/contexts/AppContext";
 import type { Article, Week, Sentence, VocabItem } from "@/lib/types";
 
@@ -187,6 +188,14 @@ export default function ArticleView({ week, article }: ArticleViewProps) {
         <Tabs defaultValue="article">
           <TabsList className="mb-6">
             <TabsTrigger value="article">記事本文</TabsTrigger>
+            <TabsTrigger value="test" className="gap-1.5">
+              テスト
+              {article.markedWords.length > 0 && (
+                <span className="ml-1 text-xs rounded-full px-1.5 py-0.5" style={{ background: "oklch(0.42 0.18 25)", color: "white" }}>
+                  {article.markedWords.length}
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="review" className="gap-1.5">
               <RotateCcw size={13} />
               復習チェック
@@ -249,6 +258,11 @@ export default function ArticleView({ week, article }: ArticleViewProps) {
                 </div>
               </div>
             )}
+          </TabsContent>
+
+          {/* Test tab */}
+          <TabsContent value="test">
+            <VocabTest article={article} />
           </TabsContent>
 
           {/* Review tab */}
