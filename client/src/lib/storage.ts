@@ -132,6 +132,93 @@ export function toggleMarkedWord(
   };
 }
 
+// ---- Vocabulary operations ----
+
+export function addVocabItem(
+  data: AppData,
+  weekId: string,
+  articleId: string,
+  sentenceIndex: number,
+  item: import("./types").VocabItem
+): AppData {
+  return {
+    ...data,
+    weeks: data.weeks.map((w) =>
+      w.id === weekId
+        ? {
+            ...w,
+            articles: w.articles.map((a) => {
+              if (a.id !== articleId) return a;
+              const sentences = a.sentences.map((s, i) =>
+                i === sentenceIndex
+                  ? { ...s, vocabulary: [...s.vocabulary, item] }
+                  : s
+              );
+              return { ...a, sentences };
+            }),
+          }
+        : w
+    ),
+  };
+}
+
+export function deleteVocabItem(
+  data: AppData,
+  weekId: string,
+  articleId: string,
+  sentenceIndex: number,
+  vocabIndex: number
+): AppData {
+  return {
+    ...data,
+    weeks: data.weeks.map((w) =>
+      w.id === weekId
+        ? {
+            ...w,
+            articles: w.articles.map((a) => {
+              if (a.id !== articleId) return a;
+              const sentences = a.sentences.map((s, i) =>
+                i === sentenceIndex
+                  ? { ...s, vocabulary: s.vocabulary.filter((_, vi) => vi !== vocabIndex) }
+                  : s
+              );
+              return { ...a, sentences };
+            }),
+          }
+        : w
+    ),
+  };
+}
+
+export function updateVocabItem(
+  data: AppData,
+  weekId: string,
+  articleId: string,
+  sentenceIndex: number,
+  vocabIndex: number,
+  item: import("./types").VocabItem
+): AppData {
+  return {
+    ...data,
+    weeks: data.weeks.map((w) =>
+      w.id === weekId
+        ? {
+            ...w,
+            articles: w.articles.map((a) => {
+              if (a.id !== articleId) return a;
+              const sentences = a.sentences.map((s, i) =>
+                i === sentenceIndex
+                  ? { ...s, vocabulary: s.vocabulary.map((v, vi) => (vi === vocabIndex ? item : v)) }
+                  : s
+              );
+              return { ...a, sentences };
+            }),
+          }
+        : w
+    ),
+  };
+}
+
 // ---- Review record operations ----
 
 export function addReviewRecord(

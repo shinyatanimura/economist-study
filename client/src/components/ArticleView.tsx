@@ -227,6 +227,8 @@ export default function ArticleView({ week, article }: ArticleViewProps) {
                       key={i}
                       sentence={s}
                       sentenceIndex={i}
+                      weekId={week.id}
+                      articleId={article.id}
                       markedWords={article.markedWords}
                       onToggleWord={(word) => toggleMarkedWord(week.id, article.id, word)}
                     />

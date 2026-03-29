@@ -4,7 +4,7 @@
 // ============================================================
 
 import React, { createContext, useContext, useState, useCallback } from "react";
-import type { AppData, Week, Article, Sentence, MarkedWord, ReviewRecord } from "@/lib/types";
+import type { AppData, Week, Article, Sentence, MarkedWord, ReviewRecord, VocabItem } from "@/lib/types";
 import {
   loadData,
   saveData,
@@ -16,6 +16,9 @@ import {
   deleteArticle,
   setSentences,
   toggleMarkedWord,
+  addVocabItem,
+  deleteVocabItem,
+  updateVocabItem,
   addReviewRecord,
   deleteReviewRecord,
 } from "@/lib/storage";
@@ -34,6 +37,10 @@ interface AppContextValue {
   setSentences: (weekId: string, articleId: string, sentences: Sentence[]) => void;
   // Marked words
   toggleMarkedWord: (weekId: string, articleId: string, word: MarkedWord) => void;
+  // Vocabulary
+  addVocabItem: (weekId: string, articleId: string, sentenceIndex: number, item: VocabItem) => void;
+  deleteVocabItem: (weekId: string, articleId: string, sentenceIndex: number, vocabIndex: number) => void;
+  updateVocabItem: (weekId: string, articleId: string, sentenceIndex: number, vocabIndex: number, item: VocabItem) => void;
   // Review records
   addReviewRecord: (weekId: string, articleId: string, record: Omit<ReviewRecord, "id">) => void;
   deleteReviewRecord: (weekId: string, articleId: string, recordId: string) => void;
@@ -59,6 +66,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteArticle: (weekId, articleId) => update(deleteArticle(data, weekId, articleId)),
     setSentences: (weekId, articleId, sentences) => update(setSentences(data, weekId, articleId, sentences)),
     toggleMarkedWord: (weekId, articleId, word) => update(toggleMarkedWord(data, weekId, articleId, word)),
+    addVocabItem: (weekId, articleId, sentenceIndex, item) => update(addVocabItem(data, weekId, articleId, sentenceIndex, item)),
+    deleteVocabItem: (weekId, articleId, sentenceIndex, vocabIndex) => update(deleteVocabItem(data, weekId, articleId, sentenceIndex, vocabIndex)),
+    updateVocabItem: (weekId, articleId, sentenceIndex, vocabIndex, item) => update(updateVocabItem(data, weekId, articleId, sentenceIndex, vocabIndex, item)),
     addReviewRecord: (weekId, articleId, record) => update(addReviewRecord(data, weekId, articleId, record)),
     deleteReviewRecord: (weekId, articleId, recordId) => update(deleteReviewRecord(data, weekId, articleId, recordId)),
   };

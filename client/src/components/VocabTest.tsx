@@ -1,8 +1,8 @@
 // ============================================================
 // VocabTest - マーキング単語のフラッシュカードテスト
 // Design: Editorial Brutalism
-// - わからなかった・微妙の単語を対象
-// - 英語→日本語の意味当てクイズ（フラッシュカード形式）
+// - 語彙登録の有無に関わらず全マーキング単語をテスト対象
+// - 語彙なしの場合は正解欄を空欄で表示
 // - テスト結果はマーキング状態に一切影響しない
 // ============================================================
 
@@ -11,45 +11,44 @@ import { motion, AnimatePresence } from "framer-motion";
 import { RotateCcw, ChevronRight, Check, X, Trophy, Shuffle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { Article, MarkedWord, Sentence } from "@/lib/types";
+import type { Article, Sentence } from "@/lib/types";
 
 interface TestCard {
   word: string;
-  definition: string;
+  definition: string; // 語彙なしの場合は ""
   markType: "unknown" | "unsure";
-  context: string; // 出典文（英文）
-}
-
-interface VocabTestProps {
-  article: Article;
+  context: string;
 }
 
 function buildCards(article: Article): TestCard[] {
+  const seen = new Set<string>();
   const cards: TestCard[] = [];
+
   for (const mw of article.markedWords) {
+    const key = mw.word.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
     const sentence: Sentence | undefined = article.sentences[mw.sentenceIndex];
-    if (!sentence) continue;
-    // 語彙リストから対応する定義を探す（大文字小文字無視）
-    const vocab = sentence.vocabulary.find(
-      (v) => v.word.toLowerCase().replace(/[^a-z0-9]/g, "") === mw.word.toLowerCase().replace(/[^a-z0-9]/g, "")
-        || v.word.toLowerCase().startsWith(mw.word.toLowerCase().slice(0, 4))
+    const context = sentence?.english ?? "";
+
+    // 語彙リストから対応する定義を探す（部分一致・大文字小文字無視）
+    const vocab = sentence?.vocabulary?.find(
+      (v) =>
+        v.word.toLowerCase().replace(/[^a-z0-9]/g, "") ===
+          mw.word.toLowerCase().replace(/[^a-z0-9]/g, "") ||
+        v.word.toLowerCase().startsWith(mw.word.toLowerCase().slice(0, 4))
     );
-    if (!vocab) continue;
+
     cards.push({
-      word: vocab.word,
-      definition: vocab.definition,
+      word: mw.word,
+      definition: vocab?.definition ?? "",
       markType: mw.markType,
-      context: sentence.english,
+      context,
     });
   }
-  // 重複除去（同じ単語が複数マークされている場合）
-  const seen = new Set<string>();
-  return cards.filter((c) => {
-    const key = c.word.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+
+  return cards;
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -63,7 +62,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 type CardResult = "correct" | "incorrect" | null;
 
-export default function VocabTest({ article }: VocabTestProps) {
+export default function VocabTest({ article }: { article: Article }) {
   const allCards = useMemo(() => buildCards(article), [article]);
   const [deck, setDeck] = useState<TestCard[]>(() => shuffle(buildCards(article)));
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -77,28 +76,23 @@ export default function VocabTest({ article }: VocabTestProps) {
   const correctCount = results.filter((r) => r === "correct").length;
   const incorrectCount = results.filter((r) => r === "incorrect").length;
 
-  const handleFlip = () => {
-    if (!flipped) {
-      setFlipped(true);
-    }
-  };
-
-  const handleResult = useCallback((result: "correct" | "incorrect") => {
-    const newResults = [...results, result];
-    setResults(newResults);
-    if (currentIndex + 1 >= total) {
-      setFinished(true);
-    } else {
-      setCurrentIndex((i) => i + 1);
-      setFlipped(false);
-      setShowContext(false);
-    }
-  }, [results, currentIndex, total]);
+  const handleResult = useCallback(
+    (result: "correct" | "incorrect") => {
+      const newResults = [...results, result];
+      setResults(newResults);
+      if (currentIndex + 1 >= total) {
+        setFinished(true);
+      } else {
+        setCurrentIndex((i) => i + 1);
+        setFlipped(false);
+        setShowContext(false);
+      }
+    },
+    [results, currentIndex, total]
+  );
 
   const handleRestart = (wrongOnly = false) => {
-    const base = wrongOnly
-      ? deck.filter((_, i) => results[i] === "incorrect")
-      : allCards;
+    const base = wrongOnly ? deck.filter((_, i) => results[i] === "incorrect") : allCards;
     setDeck(shuffle(base));
     setCurrentIndex(0);
     setFlipped(false);
@@ -114,8 +108,9 @@ export default function VocabTest({ article }: VocabTestProps) {
           テスト対象の単語がありません。
         </p>
         <p className="text-xs text-muted-foreground mt-2" style={{ fontFamily: "var(--font-ui)" }}>
-          英文の単語をクリックして「わからなかった」「微妙」にマークし、<br />
-          かつその文に語彙が登録されている単語がテスト対象になります。
+          英文の単語をクリックして「わからなかった」「微妙」にマークすると
+          <br />
+          テスト対象になります。
         </p>
       </div>
     );
@@ -131,7 +126,10 @@ export default function VocabTest({ article }: VocabTestProps) {
       >
         <div className="mb-6">
           <Trophy size={40} className="mx-auto mb-3" style={{ color: "oklch(0.42 0.18 25)" }} />
-          <h2 className="font-display text-2xl font-bold mb-1" style={{ fontFamily: "var(--font-display)" }}>
+          <h2
+            className="font-display text-2xl font-bold mb-1"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
             テスト完了
           </h2>
           <p className="text-sm text-muted-foreground" style={{ fontFamily: "var(--font-ui)" }}>
@@ -142,29 +140,56 @@ export default function VocabTest({ article }: VocabTestProps) {
         {/* Score ring */}
         <div className="relative w-28 h-28 mx-auto mb-6">
           <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-            <circle cx="50" cy="50" r="40" fill="none" stroke="oklch(0.92 0.004 286.32)" strokeWidth="10" />
             <circle
               cx="50" cy="50" r="40" fill="none"
-              stroke={pct >= 70 ? "oklch(0.55 0.18 145)" : pct >= 40 ? "oklch(0.72 0.15 60)" : "oklch(0.55 0.22 25)"}
+              stroke="oklch(0.92 0.004 286.32)" strokeWidth="10"
+            />
+            <circle
+              cx="50" cy="50" r="40" fill="none"
+              stroke={
+                pct >= 70
+                  ? "oklch(0.55 0.18 145)"
+                  : pct >= 40
+                  ? "oklch(0.72 0.15 60)"
+                  : "oklch(0.55 0.22 25)"
+              }
               strokeWidth="10"
-              strokeDasharray={`${2 * Math.PI * 40 * pct / 100} ${2 * Math.PI * 40}`}
+              strokeDasharray={`${(2 * Math.PI * 40 * pct) / 100} ${2 * Math.PI * 40}`}
               strokeLinecap="round"
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-2xl font-bold font-display" style={{ fontFamily: "var(--font-display)" }}>{pct}%</span>
+            <span
+              className="text-2xl font-bold"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              {pct}%
+            </span>
           </div>
         </div>
 
-        {/* Result breakdown */}
         <div className="flex justify-center gap-6 mb-8">
           <div className="text-center">
-            <p className="text-2xl font-bold" style={{ color: "oklch(0.55 0.18 145)", fontFamily: "var(--font-display)" }}>{correctCount}</p>
-            <p className="text-xs text-muted-foreground" style={{ fontFamily: "var(--font-ui)" }}>正解</p>
+            <p
+              className="text-2xl font-bold"
+              style={{ color: "oklch(0.55 0.18 145)", fontFamily: "var(--font-display)" }}
+            >
+              {correctCount}
+            </p>
+            <p className="text-xs text-muted-foreground" style={{ fontFamily: "var(--font-ui)" }}>
+              正解
+            </p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold" style={{ color: "oklch(0.55 0.22 25)", fontFamily: "var(--font-display)" }}>{incorrectCount}</p>
-            <p className="text-xs text-muted-foreground" style={{ fontFamily: "var(--font-ui)" }}>不正解</p>
+            <p
+              className="text-2xl font-bold"
+              style={{ color: "oklch(0.55 0.22 25)", fontFamily: "var(--font-display)" }}
+            >
+              {incorrectCount}
+            </p>
+            <p className="text-xs text-muted-foreground" style={{ fontFamily: "var(--font-ui)" }}>
+              不正解
+            </p>
           </div>
         </div>
 
@@ -179,7 +204,10 @@ export default function VocabTest({ article }: VocabTestProps) {
           </Button>
         </div>
 
-        <p className="text-xs text-muted-foreground mt-5" style={{ fontFamily: "var(--font-ui)" }}>
+        <p
+          className="text-xs text-muted-foreground mt-5"
+          style={{ fontFamily: "var(--font-ui)" }}
+        >
           ※ マーキング（わからなかった・微妙）は変更されていません
         </p>
       </motion.div>
@@ -198,8 +226,10 @@ export default function VocabTest({ article }: VocabTestProps) {
             variant="outline"
             className="text-xs"
             style={{
-              borderColor: current?.markType === "unknown" ? "var(--mark-unknown)" : "var(--mark-unsure)",
-              color: current?.markType === "unknown" ? "var(--mark-unknown)" : "var(--mark-unsure)",
+              borderColor:
+                current?.markType === "unknown" ? "var(--mark-unknown)" : "var(--mark-unsure)",
+              color:
+                current?.markType === "unknown" ? "var(--mark-unknown)" : "var(--mark-unsure)",
             }}
           >
             {current?.markType === "unknown" ? "わからなかった" : "微妙"}
@@ -216,7 +246,7 @@ export default function VocabTest({ article }: VocabTestProps) {
         <motion.div
           className="h-full rounded-full"
           style={{ background: "oklch(0.42 0.18 25)" }}
-          animate={{ width: `${((currentIndex) / total) * 100}%` }}
+          animate={{ width: `${(currentIndex / total) * 100}%` }}
           transition={{ duration: 0.3 }}
         />
       </div>
@@ -230,39 +260,53 @@ export default function VocabTest({ article }: VocabTestProps) {
           exit={{ opacity: 0, x: -30 }}
           transition={{ duration: 0.2 }}
         >
-          {/* Card face */}
           <div
             className="bg-card border border-border rounded-sm shadow-sm overflow-hidden cursor-pointer select-none"
-            onClick={handleFlip}
+            onClick={() => !flipped && setFlipped(true)}
             style={{ minHeight: "220px" }}
           >
             {/* Card header */}
-            <div className="px-5 py-3 border-b border-border flex items-center justify-between" style={{ background: "oklch(0.975 0.008 80)" }}>
-              <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "oklch(0.55 0.01 60)", fontFamily: "var(--font-ui)" }}>
+            <div
+              className="px-5 py-3 border-b border-border flex items-center justify-between"
+              style={{ background: "oklch(0.975 0.008 80)" }}
+            >
+              <span
+                className="text-xs font-semibold uppercase tracking-widest"
+                style={{ color: "oklch(0.55 0.01 60)", fontFamily: "var(--font-ui)" }}
+              >
                 {flipped ? "意味" : "この単語の意味は？"}
               </span>
               {!flipped && (
-                <span className="text-xs" style={{ color: "oklch(0.65 0.01 60)", fontFamily: "var(--font-ui)" }}>
+                <span
+                  className="text-xs"
+                  style={{ color: "oklch(0.65 0.01 60)", fontFamily: "var(--font-ui)" }}
+                >
                   クリックで答えを表示
                 </span>
               )}
             </div>
 
             {/* Card body */}
-            <div className="px-5 py-8 flex flex-col items-center justify-center text-center" style={{ minHeight: "160px" }}>
+            <div
+              className="px-5 py-8 flex flex-col items-center justify-center text-center"
+              style={{ minHeight: "160px" }}
+            >
               {!flipped ? (
                 <div>
-                  <p className="text-3xl font-bold mb-2" style={{ fontFamily: "var(--font-body)" }}>
+                  <p
+                    className="text-3xl font-bold mb-2"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  >
                     {current?.word}
                   </p>
-                  {showContext && (
+                  {showContext && current?.context && (
                     <motion.p
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       className="text-xs mt-3 leading-relaxed max-w-sm"
                       style={{ color: "oklch(0.55 0.01 60)", fontFamily: "var(--font-body)" }}
                     >
-                      {current?.context}
+                      {current.context}
                     </motion.p>
                   )}
                 </div>
@@ -271,13 +315,37 @@ export default function VocabTest({ article }: VocabTestProps) {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.15 }}
+                  className="w-full"
                 >
-                  <p className="text-sm mb-3" style={{ color: "oklch(0.55 0.01 60)", fontFamily: "var(--font-body)" }}>
+                  <p
+                    className="text-sm mb-3"
+                    style={{ color: "oklch(0.55 0.01 60)", fontFamily: "var(--font-body)" }}
+                  >
                     {current?.word}
                   </p>
-                  <p className="text-xl font-semibold leading-relaxed" style={{ fontFamily: "var(--font-jp)" }}>
-                    {current?.definition}
-                  </p>
+                  {current?.definition ? (
+                    <p
+                      className="text-xl font-semibold leading-relaxed"
+                      style={{ fontFamily: "var(--font-jp)" }}
+                    >
+                      {current.definition}
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      <p
+                        className="text-base"
+                        style={{ color: "oklch(0.65 0.01 60)", fontFamily: "var(--font-jp)" }}
+                      >
+                        （語彙未登録）
+                      </p>
+                      <p
+                        className="text-xs"
+                        style={{ color: "oklch(0.7 0.01 60)", fontFamily: "var(--font-ui)" }}
+                      >
+                        記事本文タブの語彙追加から登録できます
+                      </p>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </div>
@@ -289,7 +357,10 @@ export default function VocabTest({ article }: VocabTestProps) {
               <button
                 className="text-xs underline"
                 style={{ color: "oklch(0.6 0.01 60)", fontFamily: "var(--font-ui)" }}
-                onClick={(e) => { e.stopPropagation(); setShowContext(!showContext); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowContext(!showContext);
+                }}
               >
                 {showContext ? "文脈を隠す" : "文脈を見る"}
               </button>
@@ -328,7 +399,10 @@ export default function VocabTest({ article }: VocabTestProps) {
               <button
                 className="text-xs flex items-center gap-1 mx-auto"
                 style={{ color: "oklch(0.6 0.01 60)", fontFamily: "var(--font-ui)" }}
-                onClick={(e) => { e.stopPropagation(); handleResult("incorrect"); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleResult("incorrect");
+                }}
               >
                 スキップ <ChevronRight size={12} />
               </button>
@@ -337,8 +411,10 @@ export default function VocabTest({ article }: VocabTestProps) {
         </motion.div>
       </AnimatePresence>
 
-      {/* Note */}
-      <p className="text-xs text-center mt-6" style={{ color: "oklch(0.7 0.01 60)", fontFamily: "var(--font-ui)" }}>
+      <p
+        className="text-xs text-center mt-6"
+        style={{ color: "oklch(0.7 0.01 60)", fontFamily: "var(--font-ui)" }}
+      >
         ※ テスト結果はマーキングに影響しません
       </p>
     </div>
