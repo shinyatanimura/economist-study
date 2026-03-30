@@ -204,6 +204,29 @@
     background-color: oklch(0.9 0.01 80);
   }
 
+  /* Phrase selection mode styles */
+  .word-phrase-selectable {
+    cursor: crosshair;
+    border-radius: 2px;
+    padding: 0 1px;
+    border-bottom: 2px dashed oklch(0.6 0.12 200);
+    transition: background-color 0.15s ease;
+  }
+
+  .word-phrase-selectable:hover {
+    background-color: oklch(0.94 0.04 200);
+  }
+
+  .word-phrase-pending {
+    background-color: oklch(0.92 0.08 200);
+    border-bottom: 2px solid oklch(0.45 0.12 200);
+    cursor: crosshair;
+    border-radius: 2px;
+    padding: 0 1px;
+    color: oklch(0.3 0.12 200);
+    font-weight: 600;
+  }
+
   /* Sidebar navigation */
   .sidebar-link {
     display: flex;

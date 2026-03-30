@@ -19,6 +19,8 @@ import {
   addVocabItem,
   deleteVocabItem,
   updateVocabItem,
+  updateArticleNote,
+  setWordCheck,
   addReviewRecord,
   deleteReviewRecord,
 } from "@/lib/storage";
@@ -41,6 +43,10 @@ interface AppContextValue {
   addVocabItem: (weekId: string, articleId: string, sentenceIndex: number, item: VocabItem) => void;
   deleteVocabItem: (weekId: string, articleId: string, sentenceIndex: number, vocabIndex: number) => void;
   updateVocabItem: (weekId: string, articleId: string, sentenceIndex: number, vocabIndex: number, item: VocabItem) => void;
+  // Article note
+  updateArticleNote: (weekId: string, articleId: string, note: string) => void;
+  // Word checks (単語一覧チェック、マーキングとは独立)
+  setWordCheck: (weekId: string, articleId: string, key: string, checked: boolean) => void;
   // Review records
   addReviewRecord: (weekId: string, articleId: string, record: Omit<ReviewRecord, "id">) => void;
   deleteReviewRecord: (weekId: string, articleId: string, recordId: string) => void;
@@ -69,6 +75,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addVocabItem: (weekId, articleId, sentenceIndex, item) => update(addVocabItem(data, weekId, articleId, sentenceIndex, item)),
     deleteVocabItem: (weekId, articleId, sentenceIndex, vocabIndex) => update(deleteVocabItem(data, weekId, articleId, sentenceIndex, vocabIndex)),
     updateVocabItem: (weekId, articleId, sentenceIndex, vocabIndex, item) => update(updateVocabItem(data, weekId, articleId, sentenceIndex, vocabIndex, item)),
+    updateArticleNote: (weekId, articleId, note) => update(updateArticleNote(data, weekId, articleId, note)),
+    setWordCheck: (weekId, articleId, key, checked) => update(setWordCheck(data, weekId, articleId, key, checked)),
     addReviewRecord: (weekId, articleId, record) => update(addReviewRecord(data, weekId, articleId, record)),
     deleteReviewRecord: (weekId, articleId, recordId) => update(deleteReviewRecord(data, weekId, articleId, recordId)),
   };

@@ -1,18 +1,44 @@
 // ============================================================
 // The Economist Study App - LocalStorage 永続化ユーティリティ
 // Structure: Week → Article → Sentence (段落レベルは廃止)
+// 後方互換ポリシー: loadData時に不足フィールドをデフォルト値で補完
 // ============================================================
 
-import type { AppData, Week, Article, Sentence, MarkedWord, ReviewRecord } from "./types";
+import type { AppData, Week, Article, Sentence, MarkedWord, ReviewRecord, VocabItem, WordCheckMap } from "./types";
 import { nanoid } from "nanoid";
 
 const STORAGE_KEY = "economist-study-data";
+
+// 既存データに不足フィールドを補完するマイグレーション
+function migrateData(raw: AppData): AppData {
+  return {
+    ...raw,
+    weeks: (raw.weeks ?? []).map((w) => ({
+      ...w,
+      articles: (w.articles ?? []).map((a) => ({
+        note: "",
+        wordChecks: {},
+        ...a,
+        sentences: (a.sentences ?? []).map((s) => ({
+          ...s,
+          vocabulary: (s.vocabulary ?? []).map((v) => ({
+            isPhrase: false,
+            wordIndices: [],
+            ...v,
+          })),
+        })),
+        markedWords: a.markedWords ?? [],
+        reviewRecords: a.reviewRecords ?? [],
+      })),
+    })),
+  };
+}
 
 export function loadData(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { weeks: [] };
-    return JSON.parse(raw) as AppData;
+    return migrateData(JSON.parse(raw) as AppData);
   } catch {
     return { weeks: [] };
   }
@@ -46,6 +72,8 @@ export function addArticle(data: AppData, weekId: string, title: string): AppDat
     sentences: [],
     markedWords: [],
     reviewRecords: [],
+    note: "",
+    wordChecks: {},
     createdAt: new Date().toISOString(),
   };
   return {
@@ -60,7 +88,7 @@ export function updateArticle(
   data: AppData,
   weekId: string,
   articleId: string,
-  patch: Partial<Pick<Article, "title" | "sentences" | "markedWords">>
+  patch: Partial<Pick<Article, "title" | "sentences" | "markedWords" | "note" | "wordChecks">>
 ): AppData {
   return {
     ...data,
@@ -139,7 +167,7 @@ export function addVocabItem(
   weekId: string,
   articleId: string,
   sentenceIndex: number,
-  item: import("./types").VocabItem
+  item: VocabItem
 ): AppData {
   return {
     ...data,
@@ -196,7 +224,7 @@ export function updateVocabItem(
   articleId: string,
   sentenceIndex: number,
   vocabIndex: number,
-  item: import("./types").VocabItem
+  item: VocabItem
 ): AppData {
   return {
     ...data,
@@ -212,6 +240,43 @@ export function updateVocabItem(
                   : s
               );
               return { ...a, sentences };
+            }),
+          }
+        : w
+    ),
+  };
+}
+
+// ---- Article note operations ----
+
+export function updateArticleNote(
+  data: AppData,
+  weekId: string,
+  articleId: string,
+  note: string
+): AppData {
+  return updateArticle(data, weekId, articleId, { note });
+}
+
+// ---- Word check operations (単語一覧チェック、マーキングとは独立) ----
+
+export function setWordCheck(
+  data: AppData,
+  weekId: string,
+  articleId: string,
+  key: string,
+  checked: boolean
+): AppData {
+  return {
+    ...data,
+    weeks: data.weeks.map((w) =>
+      w.id === weekId
+        ? {
+            ...w,
+            articles: w.articles.map((a) => {
+              if (a.id !== articleId) return a;
+              const wordChecks: WordCheckMap = { ...(a.wordChecks ?? {}), [key]: checked };
+              return { ...a, wordChecks };
             }),
           }
         : w

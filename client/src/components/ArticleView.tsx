@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import SentenceCard from "./SentenceCard";
 import ReviewSection from "./ReviewSection";
-import VocabTest from "./VocabTest";
+import WordList from "./WordList";
 import { useApp } from "@/contexts/AppContext";
 import type { Article, Week, Sentence, VocabItem } from "@/lib/types";
 
@@ -86,7 +86,15 @@ interface ArticleViewProps {
 }
 
 export default function ArticleView({ week, article }: ArticleViewProps) {
-  const { setSentences, updateArticle, toggleMarkedWord } = useApp();
+  const { setSentences, updateArticle, toggleMarkedWord, updateArticleNote } = useApp();
+  const [noteValue, setNoteValue] = useState(article.note ?? "");
+  const [noteSaved, setNoteSaved] = useState(false);
+
+  const handleSaveNote = () => {
+    updateArticleNote(week.id, article.id, noteValue);
+    setNoteSaved(true);
+    setTimeout(() => setNoteSaved(false), 1500);
+  };
 
   // Add/Edit sentences dialog
   const [inputOpen, setInputOpen] = useState(false);
@@ -188,12 +196,18 @@ export default function ArticleView({ week, article }: ArticleViewProps) {
         <Tabs defaultValue="article">
           <TabsList className="mb-6">
             <TabsTrigger value="article">記事本文</TabsTrigger>
-            <TabsTrigger value="test" className="gap-1.5">
-              テスト
+            <TabsTrigger value="wordlist" className="gap-1.5">
+              単語一覧
               {article.markedWords.length > 0 && (
                 <span className="ml-1 text-xs rounded-full px-1.5 py-0.5" style={{ background: "oklch(0.42 0.18 25)", color: "white" }}>
                   {article.markedWords.length}
                 </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="memo" className="gap-1.5">
+              メモ
+              {(article.note ?? "").trim().length > 0 && (
+                <span className="ml-1 w-1.5 h-1.5 rounded-full inline-block" style={{ background: "oklch(0.42 0.18 25)" }} />
               )}
             </TabsTrigger>
             <TabsTrigger value="review" className="gap-1.5">
@@ -262,9 +276,35 @@ export default function ArticleView({ week, article }: ArticleViewProps) {
             )}
           </TabsContent>
 
-          {/* Test tab */}
-          <TabsContent value="test">
-            <VocabTest article={article} />
+          {/* Memo tab */}
+          <TabsContent value="memo">
+            <div className="max-w-xl">
+              <p className="text-xs mb-2" style={{ color: "oklch(0.6 0.01 60)", fontFamily: "var(--font-ui)" }}>
+                この記事についてのメモを自由に記録できます。
+              </p>
+              <Textarea
+                value={noteValue}
+                onChange={(e) => { setNoteValue(e.target.value); setNoteSaved(false); }}
+                placeholder="気づいたこと、背景知識、感想など..."
+                className="min-h-[200px] text-sm leading-relaxed resize-y"
+                style={{ fontFamily: "var(--font-jp)" }}
+              />
+              <div className="flex items-center gap-3 mt-3">
+                <Button size="sm" onClick={handleSaveNote} className="gap-1.5">
+                  <Check size={13} /> 保存
+                </Button>
+                {noteSaved && (
+                  <span className="text-xs" style={{ color: "oklch(0.55 0.18 145)", fontFamily: "var(--font-ui)" }}>
+                    保存しました
+                  </span>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Word list tab */}
+          <TabsContent value="wordlist">
+            <WordList article={article} weekId={week.id} />
           </TabsContent>
 
           {/* Review tab */}

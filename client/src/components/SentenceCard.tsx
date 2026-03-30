@@ -5,18 +5,20 @@
 // - 日本語訳はデフォルト折りたたみ
 // - 語彙は日本語訳の直下にデフォルト折りたたみ
 // - 語彙の追加・編集・削除
+// - 熟語登録: 2単語マーク時に個別/熟語を選べるポップアップ
 // - マーキング単語の長押しで意味ポップオーバー
 // ============================================================
 
 import { useState, useRef, useCallback } from "react";
-import { ChevronDown, ChevronRight, Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Trash2, Pencil, Check, X, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
 import { useApp } from "@/contexts/AppContext";
 import type { Sentence, MarkedWord, VocabItem } from "@/lib/types";
 
-// ---- MarkableText with long-press popover ----
+// ---- MarkableWord with long-press popover ----
 
 interface MarkableWordProps {
   token: string;
@@ -24,7 +26,11 @@ interface MarkableWordProps {
   wordIndex: number;
   marked: MarkedWord | undefined;
   vocabulary: VocabItem[];
+  // 熟語選択モード
+  phraseSelecting: boolean;
+  phraseSelected: number[]; // 選択中のwordIndex配列
   onToggle: (word: MarkedWord) => void;
+  onPhraseSelect: (wordIndex: number) => void;
 }
 
 function getNextMarkType(current: "unknown" | "unsure" | undefined): "unknown" | "unsure" | null {
@@ -33,45 +39,57 @@ function getNextMarkType(current: "unknown" | "unsure" | undefined): "unknown" |
   return null;
 }
 
-function MarkableWord({ token, sentenceIndex, wordIndex, marked, vocabulary, onToggle }: MarkableWordProps) {
+function MarkableWord({
+  token, sentenceIndex, wordIndex, marked, vocabulary,
+  phraseSelecting, phraseSelected, onToggle, onPhraseSelect
+}: MarkableWordProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didLongPress = useRef(false);
 
-  // 対応する語彙を探す（部分一致）
   const vocab = vocabulary.find(
     (v) =>
       v.word.toLowerCase().replace(/[^a-z0-9]/g, "") === token.toLowerCase().replace(/[^a-z0-9]/g, "") ||
-      v.word.toLowerCase().startsWith(token.toLowerCase().slice(0, 4))
+      (token.length >= 4 && v.word.toLowerCase().startsWith(token.toLowerCase().slice(0, 4)))
   );
 
+  const isPhrasePending = phraseSelecting && phraseSelected.includes(wordIndex);
+
   const handlePointerDown = useCallback(() => {
+    if (phraseSelecting) return;
     didLongPress.current = false;
     longPressTimer.current = setTimeout(() => {
       didLongPress.current = true;
       if (marked) setPopoverOpen(true);
     }, 500);
-  }, [marked]);
+  }, [marked, phraseSelecting]);
 
   const handlePointerUp = useCallback(() => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
   }, []);
 
   const handleClick = useCallback(() => {
-    if (didLongPress.current) return; // 長押しはクリックとして扱わない
+    if (phraseSelecting) {
+      onPhraseSelect(wordIndex);
+      return;
+    }
+    if (didLongPress.current) return;
     const next = getNextMarkType(marked?.markType);
     if (next === null) {
       onToggle({ word: token, markType: marked!.markType, sentenceIndex, wordIndex });
     } else {
       onToggle({ word: token, markType: next, sentenceIndex, wordIndex });
     }
-  }, [marked, token, sentenceIndex, wordIndex, onToggle]);
+  }, [phraseSelecting, marked, token, sentenceIndex, wordIndex, onToggle, onPhraseSelect]);
 
-  const className = marked
-    ? marked.markType === "unknown"
-      ? "word-mark-unknown"
-      : "word-mark-unsure"
-    : "word-clickable";
+  let className = "";
+  if (phraseSelecting) {
+    className = isPhrasePending ? "word-phrase-pending" : "word-phrase-selectable";
+  } else if (marked) {
+    className = marked.markType === "unknown" ? "word-mark-unknown" : "word-mark-unsure";
+  } else {
+    className = "word-clickable";
+  }
 
   const wordSpan = (
     <span
@@ -86,7 +104,7 @@ function MarkableWord({ token, sentenceIndex, wordIndex, marked, vocabulary, onT
     </span>
   );
 
-  if (!marked) return wordSpan;
+  if (!marked || phraseSelecting) return wordSpan;
 
   return (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
@@ -141,7 +159,7 @@ function VocabRow({ vocab, onSave, onDelete }: VocabRowProps) {
 
   const handleSave = () => {
     if (!word.trim()) return;
-    onSave({ word: word.trim(), definition: def.trim() });
+    onSave({ ...vocab, word: word.trim(), definition: def.trim() });
     setEditing(false);
   };
 
@@ -151,9 +169,9 @@ function VocabRow({ vocab, onSave, onDelete }: VocabRowProps) {
         <Input
           value={word}
           onChange={(e) => setWord(e.target.value)}
-          className="h-7 text-xs w-28 shrink-0"
+          className="h-7 text-xs w-32 shrink-0"
           style={{ fontFamily: "var(--font-body)" }}
-          placeholder="単語"
+          placeholder="単語・熟語"
         />
         <Input
           value={def}
@@ -171,9 +189,16 @@ function VocabRow({ vocab, onSave, onDelete }: VocabRowProps) {
 
   return (
     <div className="flex gap-2 text-sm items-center group py-0.5">
-      <span className="font-semibold shrink-0" style={{ fontFamily: "var(--font-body)", color: "oklch(0.25 0.01 60)", minWidth: "7rem" }}>
-        {vocab.word}
-      </span>
+      <div className="flex items-center gap-1.5 shrink-0" style={{ minWidth: "8rem" }}>
+        {vocab.isPhrase && (
+          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0" style={{ borderColor: "oklch(0.6 0.12 200)", color: "oklch(0.45 0.12 200)" }}>
+            熟語
+          </Badge>
+        )}
+        <span className="font-semibold" style={{ fontFamily: "var(--font-body)", color: "oklch(0.25 0.01 60)" }}>
+          {vocab.word}
+        </span>
+      </div>
       <span className="flex-1" style={{ color: "oklch(0.45 0.01 60)", fontFamily: "var(--font-jp)" }}>
         {vocab.definition}
       </span>
@@ -205,7 +230,7 @@ function AddVocabRow({ onAdd }: AddVocabRowProps) {
 
   const handleAdd = () => {
     if (!word.trim()) return;
-    onAdd({ word: word.trim(), definition: def.trim() });
+    onAdd({ word: word.trim(), definition: def.trim(), isPhrase: false });
     setWord("");
     setDef("");
     setOpen(false);
@@ -228,9 +253,9 @@ function AddVocabRow({ onAdd }: AddVocabRowProps) {
       <Input
         value={word}
         onChange={(e) => setWord(e.target.value)}
-        className="h-7 text-xs w-28 shrink-0"
+        className="h-7 text-xs w-32 shrink-0"
         style={{ fontFamily: "var(--font-body)" }}
-        placeholder="単語"
+        placeholder="単語・熟語"
         autoFocus
       />
       <Input
@@ -243,6 +268,89 @@ function AddVocabRow({ onAdd }: AddVocabRowProps) {
       />
       <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={handleAdd}><Check size={12} /></Button>
       <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => setOpen(false)}><X size={12} /></Button>
+    </div>
+  );
+}
+
+// ---- Phrase registration dialog (2単語選択後のモーダル) ----
+interface PhraseDialogProps {
+  words: string[]; // 選択された単語（順番通り）
+  wordIndices: number[];
+  sentenceIndex: number;
+  onRegisterIndividual: () => void; // 個別に登録
+  onRegisterPhrase: (phraseWord: string, definition: string) => void; // 熟語として登録
+  onCancel: () => void;
+}
+
+function PhraseDialog({ words, wordIndices, sentenceIndex, onRegisterIndividual, onRegisterPhrase, onCancel }: PhraseDialogProps) {
+  const [phraseWord, setPhraseWord] = useState(words.join(" "));
+  const [definition, setDefinition] = useState("");
+
+  return (
+    <div
+      className="mt-2 p-3 border rounded-sm"
+      style={{ background: "oklch(0.97 0.005 200 / 0.6)", borderColor: "oklch(0.6 0.12 200)", fontFamily: "var(--font-ui)" }}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <BookOpen size={13} style={{ color: "oklch(0.45 0.12 200)" }} />
+        <span className="text-xs font-semibold" style={{ color: "oklch(0.35 0.12 200)" }}>
+          2つの単語が選択されました
+        </span>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "oklch(0.5 0.01 60)" }}>
+        <span className="font-semibold" style={{ fontFamily: "var(--font-body)" }}>
+          {words.join("  ")}
+        </span>
+        　をどのように登録しますか？
+      </p>
+
+      {/* 熟語として登録フォーム */}
+      <div className="space-y-1.5 mb-3">
+        <p className="text-xs font-medium" style={{ color: "oklch(0.45 0.12 200)" }}>熟語として登録</p>
+        <div className="flex gap-1.5">
+          <Input
+            value={phraseWord}
+            onChange={(e) => setPhraseWord(e.target.value)}
+            className="h-7 text-xs w-36 shrink-0"
+            style={{ fontFamily: "var(--font-body)" }}
+            placeholder="熟語"
+          />
+          <Input
+            value={definition}
+            onChange={(e) => setDefinition(e.target.value)}
+            className="h-7 text-xs flex-1"
+            style={{ fontFamily: "var(--font-jp)" }}
+            placeholder="意味（空欄可）"
+            onKeyDown={(e) => e.key === "Enter" && onRegisterPhrase(phraseWord, definition)}
+          />
+          <Button
+            size="sm"
+            className="h-7 text-xs shrink-0"
+            style={{ background: "oklch(0.45 0.12 200)", color: "white" }}
+            onClick={() => onRegisterPhrase(phraseWord, definition)}
+          >
+            登録
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          onClick={onRegisterIndividual}
+        >
+          個別に登録
+        </Button>
+        <button
+          className="text-xs"
+          style={{ color: "oklch(0.6 0.01 60)" }}
+          onClick={onCancel}
+        >
+          キャンセル
+        </button>
+      </div>
     </div>
   );
 }
@@ -270,42 +378,113 @@ export default function SentenceCard({
   const [translationOpen, setTranslationOpen] = useState(false);
   const [vocabOpen, setVocabOpen] = useState(false);
 
+  // 熟語選択モード
+  const [phraseSelecting, setPhraseSelecting] = useState(false);
+  const [phraseSelected, setPhraseSelected] = useState<number[]>([]); // wordIndex配列
+  const [showPhraseDialog, setShowPhraseDialog] = useState(false);
+
   const hasTranslation = !!sentence.japanese?.trim();
-  const hasVocab = sentence.vocabulary && sentence.vocabulary.length > 0;
+
+  // 熟語モードの単語選択ハンドラ
+  const handlePhraseSelect = useCallback((wordIndex: number) => {
+    setPhraseSelected((prev) => {
+      if (prev.includes(wordIndex)) {
+        return prev.filter((i) => i !== wordIndex);
+      }
+      const next = [...prev, wordIndex].sort((a, b) => a - b);
+      if (next.length === 2) {
+        setShowPhraseDialog(true);
+      }
+      return next;
+    });
+  }, []);
+
+  // 熟語モードキャンセル
+  const cancelPhraseMode = () => {
+    setPhraseSelecting(false);
+    setPhraseSelected([]);
+    setShowPhraseDialog(false);
+  };
+
+  // 個別登録（2単語それぞれをVocabItemとして追加）
+  const handleRegisterIndividual = () => {
+    const tokens = splitIntoTokens(sentence.english);
+    let wi = -1;
+    const wordTokens: { token: string; wordIndex: number }[] = [];
+    tokens.forEach((t) => {
+      if (t.isWord) { wi++; wordTokens.push({ token: t.token, wordIndex: wi }); }
+    });
+    phraseSelected.forEach((idx) => {
+      const found = wordTokens.find((w) => w.wordIndex === idx);
+      if (found) {
+        addVocabItem(weekId, articleId, sentenceIndex, {
+          word: found.token,
+          definition: "",
+          isPhrase: false,
+        });
+      }
+    });
+    cancelPhraseMode();
+    setVocabOpen(true);
+  };
+
+  // 熟語として登録
+  const handleRegisterPhrase = (phraseWord: string, definition: string) => {
+    addVocabItem(weekId, articleId, sentenceIndex, {
+      word: phraseWord,
+      definition,
+      isPhrase: true,
+      wordIndices: phraseSelected,
+    });
+    cancelPhraseMode();
+    setVocabOpen(true);
+  };
+
+  // 選択中の単語テキストを取得
+  const getSelectedWords = (): string[] => {
+    const tokens = splitIntoTokens(sentence.english);
+    let wi = -1;
+    const result: string[] = [];
+    tokens.forEach((t) => {
+      if (t.isWord) {
+        wi++;
+        if (phraseSelected.includes(wi)) result.push(t.token);
+      }
+    });
+    return result;
+  };
 
   const tokens = splitIntoTokens(sentence.english);
   let wordIndex = -1;
 
   const vocabSection = (
     <div>
-      {(hasVocab || true) && (
-        <div className="mt-2">
-          <button
-            className="flex items-center gap-1 text-xs transition-colors hover:opacity-80"
-            style={{ color: "oklch(0.55 0.01 60)", fontFamily: "var(--font-ui)" }}
-            onClick={() => setVocabOpen(!vocabOpen)}
-          >
-            {vocabOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            語彙 {sentence.vocabulary.length > 0 ? `(${sentence.vocabulary.length})` : ""}
-          </button>
+      <div className="mt-2">
+        <button
+          className="flex items-center gap-1 text-xs transition-colors hover:opacity-80"
+          style={{ color: "oklch(0.55 0.01 60)", fontFamily: "var(--font-ui)" }}
+          onClick={() => setVocabOpen(!vocabOpen)}
+        >
+          {vocabOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          語彙 {sentence.vocabulary.length > 0 ? `(${sentence.vocabulary.length})` : ""}
+        </button>
 
-          {vocabOpen && (
-            <div className="mt-1.5 space-y-0.5">
-              {sentence.vocabulary.map((v, i) => (
-                <VocabRow
-                  key={i}
-                  vocab={v}
-                  onSave={(item) => updateVocabItem(weekId, articleId, sentenceIndex, i, item)}
-                  onDelete={() => deleteVocabItem(weekId, articleId, sentenceIndex, i)}
-                />
-              ))}
-              <AddVocabRow
-                onAdd={(item) => addVocabItem(weekId, articleId, sentenceIndex, item)}
+        {vocabOpen && (
+          <div className="mt-1.5 space-y-0.5">
+            {sentence.vocabulary.map((v, i) => (
+              <VocabRow
+                key={i}
+                vocab={v}
+                onSave={(item) => updateVocabItem(weekId, articleId, sentenceIndex, i, item)}
+                onDelete={() => deleteVocabItem(weekId, articleId, sentenceIndex, i)}
               />
-            </div>
-          )}
-        </div>
-      )}
+            ))}
+            <AddVocabRow
+              onAdd={(item) => addVocabItem(weekId, articleId, sentenceIndex, item)}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -328,11 +507,52 @@ export default function SentenceCard({
               wordIndex={currentWordIndex}
               marked={marked}
               vocabulary={sentence.vocabulary}
+              phraseSelecting={phraseSelecting}
+              phraseSelected={phraseSelected}
               onToggle={onToggleWord}
+              onPhraseSelect={handlePhraseSelect}
             />
           );
         })}
       </p>
+
+      {/* 熟語モードバー */}
+      <div className="mt-1.5 flex items-center gap-2">
+        {!phraseSelecting ? (
+          <button
+            className="flex items-center gap-1 text-xs hover:opacity-80 transition-opacity"
+            style={{ color: "oklch(0.6 0.12 200)", fontFamily: "var(--font-ui)" }}
+            onClick={() => { setPhraseSelecting(true); setPhraseSelected([]); setShowPhraseDialog(false); }}
+          >
+            <BookOpen size={11} /> 熟語登録
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 text-xs" style={{ fontFamily: "var(--font-ui)" }}>
+            <span style={{ color: "oklch(0.45 0.12 200)" }}>
+              {phraseSelected.length === 0
+                ? "1つ目の単語をクリック"
+                : phraseSelected.length === 1
+                ? "2つ目の単語をクリック"
+                : "単語を選択中..."}
+            </span>
+            <button className="underline" style={{ color: "oklch(0.6 0.01 60)" }} onClick={cancelPhraseMode}>
+              キャンセル
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 熟語選択ダイアログ */}
+      {showPhraseDialog && phraseSelected.length === 2 && (
+        <PhraseDialog
+          words={getSelectedWords()}
+          wordIndices={phraseSelected}
+          sentenceIndex={sentenceIndex}
+          onRegisterIndividual={handleRegisterIndividual}
+          onRegisterPhrase={handleRegisterPhrase}
+          onCancel={cancelPhraseMode}
+        />
+      )}
 
       {/* Japanese translation toggle */}
       {hasTranslation && (
