@@ -77,13 +77,22 @@ export default function WordList({
     // phraseVocab[sentenceIndex] = VocabItem[] (isPhrase === true のもの)
     const phraseVocabBySentence: Map<number, { word: string; definition: string; wordIndices: number[] }[]> = new Map();
     article.sentences.forEach((s, si) => {
-      const phrases = (s.vocabulary ?? []).filter((v) => v.isPhrase && v.wordIndices && v.wordIndices.length > 0);
+      // 🌟変更点1：裏データ(wordIndices)がなくても、熟語登録(isPhrase)されていればOKにする
+      const phrases = (s.vocabulary ?? []).filter((v) => v.isPhrase);
+      
       if (phrases.length > 0) {
-        phraseVocabBySentence.set(si, phrases.map((v) => ({
-          word: v.word,
-          definition: v.definition ?? "",
-          wordIndices: v.wordIndices ?? [],
-        })));
+        phraseVocabBySentence.set(si, phrases.map((v) => {
+          // 🌟変更点2：裏データが空っぽの場合は、さっき作った関数で英文から自動計算する
+          let indices = v.wordIndices ?? [];
+          if (indices.length === 0) {
+            indices = getWordIndicesForPhrase(s.english ?? "", v.word);
+          }
+          return {
+            word: v.word,
+            definition: v.definition ?? "",
+            wordIndices: indices,
+          };
+        }));
       }
     });
 
