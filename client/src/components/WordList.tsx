@@ -14,51 +14,68 @@ import { Badge } from "@/components/ui/badge";
 import { useApp } from "@/contexts/AppContext";
 import type { Article } from "@/lib/types";
 
-// 🌟 ここから追加：英文と熟語テキストから、単語の場所を自動計算する関数
+// 🌟 英文から熟語のインデックスを自動で探し出す関数（原形・過去形なども柔軟にマッチ）
 function getWordIndicesForPhrase(sentenceText: string, phraseText: string): number[] {
-  const tokens = sentenceText.split(/(\s+|[^\w''-]+)/).filter((p) => p.length > 0);
+  const wordRegex = /[\w''-]+/;
+  const tokens = sentenceText.split(/(\s+|[^\w''-]+)/).filter(p => p.length > 0);
   let currentWordIndex = -1;
   const wordTokens: { word: string; index: number }[] = [];
+
   tokens.forEach((t) => {
-    if (/[\w''-]+/.test(t) && t.trim().length > 0) {
+    if (wordRegex.test(t) && t.trim().length > 0) {
       currentWordIndex++;
       wordTokens.push({ word: t, index: currentWordIndex });
     }
   });
 
-  const pTokens = phraseText.split(/(\s+|[^\w''-]+)/).filter((p) => /[\w''-]+/.test(p) && p.trim().length > 0);
+  const pTokens = phraseText.split(/(\s+|[^\w''-]+)/).filter(p => wordRegex.test(p) && p.trim().length > 0);
   if (pTokens.length === 0) return [];
 
+  // パターン1: 連続してマッチするかチェック
   for (let i = 0; i <= wordTokens.length - pTokens.length; i++) {
-    let match = true;
+    let matchCount = 0;
     for (let j = 0; j < pTokens.length; j++) {
       const w1 = wordTokens[i + j].word.toLowerCase().replace(/[^a-z0-9]/g, "");
       const w2 = pTokens[j].toLowerCase().replace(/[^a-z0-9]/g, "");
-      if (w1 !== w2) {
-        match = false;
-        break;
-      }
+      
+      const isMatch = w1 === w2 || w1.includes(w2) || w2.includes(w1) || (w1.length >= 3 && w2.length >= 3 && w1.slice(0, 3) === w2.slice(0, 3));
+
+      if (isMatch) matchCount++;
+      else break;
     }
-    if (match) {
-      return wordTokens.slice(i, i + pTokens.length).map((w) => w.index);
+    if (matchCount === pTokens.length) {
+      return wordTokens.slice(i, i + pTokens.length).map(w => w.index);
     }
   }
+
+  // パターン2: 間に別の単語が挟まっていても順番に出現すればマッチとみなす
+  let phraseWordIndex = 0;
+  const fallbackIndices: number[] = [];
+  for (let i = 0; i < wordTokens.length; i++) {
+    const w1 = wordTokens[i].word.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const w2 = pTokens[phraseWordIndex].toLowerCase().replace(/[^a-z0-9]/g, "");
+    const isMatch = w1 === w2 || w1.includes(w2) || w2.includes(w1) || (w1.length >= 3 && w2.length >= 3 && w1.slice(0, 3) === w2.slice(0, 3));
+
+    if (isMatch) {
+      fallbackIndices.push(wordTokens[i].index);
+      phraseWordIndex++;
+      if (phraseWordIndex === pTokens.length) return fallbackIndices;
+    }
+  }
+
   return [];
 }
-// 🌟 ここまで追加
 
 interface WordEntry {
-  // チェック状態管理のキー（熟語の場合は "phrase-{sentenceIndex}-{wordIndices.join('-')}"）
   key: string;
-  displayWord: string;          // 表示するテキスト（熟語なら "presided over"）
+  displayWord: string;
   markType: "unknown" | "unsure";
   sentenceIndex: number;
-  sortWordIndex: number;        // ソート用（先頭wordIndex）
+  sortWordIndex: number;
   definition: string;
   isPhrase: boolean;
   context: string;
   checked: boolean;
-  // 熟語の場合、構成単語のwordIndexリスト（チェック一括管理用）
   memberWordIndices: number[];
 }
 
@@ -73,16 +90,14 @@ export default function WordList({
   const wordChecks = article.wordChecks ?? {};
 
   const entries: WordEntry[] = useMemo(() => {
-    // 熟語語彙を文ごとにインデックス化
-    // phraseVocab[sentenceIndex] = VocabItem[] (isPhrase === true のもの)
     const phraseVocabBySentence: Map<number, { word: string; definition: string; wordIndices: number[] }[]> = new Map();
+    
     article.sentences.forEach((s, si) => {
-      // 🌟変更点1：裏データ(wordIndices)がなくても、熟語登録(isPhrase)されていればOKにする
-      const phrases = (s.vocabulary ?? []).filter((v) => v.isPhrase);
+      // 🌟絶対的修正ポイント：「isPhraseがtrue」または「名前にスペースが含まれている」なら強制的に熟語にする！
+      const phrases = (s.vocabulary ?? []).filter((v) => v.isPhrase || v.word.includes(" "));
       
       if (phrases.length > 0) {
         phraseVocabBySentence.set(si, phrases.map((v) => {
-          // 🌟変更点2：裏データが空っぽの場合は、さっき作った関数で英文から自動計算する
           let indices = v.wordIndices ?? [];
           if (indices.length === 0) {
             indices = getWordIndicesForPhrase(s.english ?? "", v.word);
@@ -96,18 +111,14 @@ export default function WordList({
       }
     });
 
-    // markedWords を sentenceIndex → wordIndex のセットに変換
-    // どのwordIndexがマークされているかを高速検索
     const markedSet = new Map<string, "unknown" | "unsure">();
     for (const mw of article.markedWords) {
       markedSet.set(`${mw.sentenceIndex}-${mw.wordIndex}`, mw.markType);
     }
 
-    // 処理済みwordIndexを記録（熟語に吸収された単語を個別表示しないため）
     const absorbed = new Set<string>();
     const result: WordEntry[] = [];
 
-    // sentenceIndex 順に処理
     const sentenceIndices = Array.from(new Set(article.markedWords.map((m) => m.sentenceIndex))).sort((a, b) => a - b);
 
     for (const si of sentenceIndices) {
@@ -115,19 +126,17 @@ export default function WordList({
       const context = sentence?.english ?? "";
       const phrases = phraseVocabBySentence.get(si) ?? [];
 
-      // このsentenceのmarkedWordsをwordIndex順に取得
       const sentenceMarked = article.markedWords
         .filter((m) => m.sentenceIndex === si)
         .sort((a, b) => a.wordIndex - b.wordIndex);
 
-      // 熟語を先に処理（構成単語がすべてマークされているものを熟語エントリとして追加）
+      // 熟語の処理
       for (const phrase of phrases) {
         const { wordIndices } = phrase;
-        // 熟語の構成単語のうち、少なくとも1つがマークされていれば熟語エントリとして表示
         const markedIndices = wordIndices.filter((wi) => markedSet.has(`${si}-${wi}`));
+        
         if (markedIndices.length === 0) continue;
 
-        // 熟語のmarkTypeは構成単語の中で最も強いもの（unknown > unsure）
         const markType: "unknown" | "unsure" = markedIndices.some(
           (wi) => markedSet.get(`${si}-${wi}`) === "unknown"
         ) ? "unknown" : "unsure";
@@ -148,23 +157,20 @@ export default function WordList({
           memberWordIndices: wordIndices,
         });
 
-        // 構成単語を「吸収済み」としてマーク
         wordIndices.forEach((wi) => absorbed.add(`${si}-${wi}`));
       }
 
-      // 熟語に吸収されなかった個別単語を処理
+      // 個別単語の処理
       for (const mw of sentenceMarked) {
         const mwKey = `${mw.sentenceIndex}-${mw.wordIndex}`;
         if (absorbed.has(mwKey)) continue;
 
-        // 重複チェック
         if (result.some((e) => e.key === mwKey)) continue;
 
-        // 語彙から意味を検索（完全一致優先、前方一致フォールバック）
         const vocab = sentence?.vocabulary ?? [];
         const v = vocab.find(
           (v) =>
-            !v.isPhrase &&
+            !(v.isPhrase || v.word.includes(" ")) && // 🌟ここも修正（強制的に熟語化されたものは省く）
             (v.word.toLowerCase().replace(/[^a-z0-9]/g, "") ===
               mw.word.toLowerCase().replace(/[^a-z0-9]/g, "") ||
               (mw.word.length >= 4 &&
@@ -186,7 +192,6 @@ export default function WordList({
       }
     }
 
-    // sentenceIndex → sortWordIndex 順にソート
     result.sort((a, b) =>
       a.sentenceIndex !== b.sentenceIndex
         ? a.sentenceIndex - b.sentenceIndex
@@ -196,7 +201,6 @@ export default function WordList({
     return result;
   }, [article.markedWords, article.sentences, article.wordChecks]);
 
-  // チェック済みは下部へ
   const unchecked = entries.filter((e) => !e.checked);
   const checked = entries.filter((e) => e.checked);
   const ordered = [...unchecked, ...checked];
@@ -251,7 +255,6 @@ export default function WordList({
                 background: entry.checked ? "oklch(0.97 0 0)" : undefined,
               }}
             >
-              {/* Check button */}
               <button
                 className="mt-0.5 shrink-0 transition-opacity hover:opacity-70"
                 onClick={() => setWordCheck(weekId, article.id, entry.key, !entry.checked)}
@@ -264,7 +267,6 @@ export default function WordList({
                 )}
               </button>
 
-              {/* Word info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span
