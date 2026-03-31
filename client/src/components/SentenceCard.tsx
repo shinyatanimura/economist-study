@@ -122,7 +122,6 @@ function MarkableWord({
     </span>
   );
 
-  // 熟語モード中または未マークはポップオーバーなし
   if (!marked || phraseSelecting) return wordSpan;
 
   return (
@@ -233,10 +232,9 @@ function AddVocabRow({ onAdd }: { onAdd: (item: VocabItem) => void }) {
 }
 
 // ---- Phrase confirm dialog ----
-// 単語を選択後「登録する」を押したときに表示
 interface PhraseConfirmDialogProps {
-  selectedWords: string[];       // 選択された単語テキスト（順番通り）
-  selectedIndices: number[];     // wordIndex配列
+  selectedWords: string[];
+  selectedIndices: number[];
   sentenceIndex: number;
   onRegisterPhrase: (phraseWord: string, definition: string, markType: WordMarkType | null) => void;
   onRegisterIndividual: (markType: WordMarkType | null) => void;
@@ -272,7 +270,6 @@ function PhraseConfirmDialog({
         </span>
       </div>
 
-      {/* マーキング選択 */}
       <div>
         <p className="text-xs mb-1.5" style={{ color: "oklch(0.5 0.01 60)" }}>マーキング</p>
         <div className="flex gap-1.5 flex-wrap">
@@ -293,7 +290,6 @@ function PhraseConfirmDialog({
         </div>
       </div>
 
-      {/* 熟語として登録 */}
       <div>
         <p className="text-xs mb-1.5" style={{ color: "oklch(0.45 0.12 200)", fontWeight: 600 }}>熟語として登録</p>
         <div className="flex gap-1.5">
@@ -323,7 +319,6 @@ function PhraseConfirmDialog({
         </div>
       </div>
 
-      {/* 個別登録 or キャンセル */}
       <div className="flex items-center gap-3">
         <Button
           size="sm"
@@ -364,18 +359,16 @@ export default function SentenceCard({
   markedWords,
   onToggleWord,
 }: SentenceCardProps) {
-  const { addVocabItem, deleteVocabItem, updateVocabItem, addMarkedWords } = useApp();
+  const { addVocabItems, deleteVocabItem, updateVocabItem, addMarkedWords } = useApp();
   const [translationOpen, setTranslationOpen] = useState(false);
   const [vocabOpen, setVocabOpen] = useState(false);
 
-  // 熟語選択モード
   const [phraseSelecting, setPhraseSelecting] = useState(false);
   const [phraseSelected, setPhraseSelected] = useState<number[]>([]);
   const [showPhraseDialog, setShowPhraseDialog] = useState(false);
 
   const hasTranslation = !!sentence.japanese?.trim();
 
-  // トークン→wordIndex マッピング（レンダリング時に構築）
   const tokens = splitIntoTokens(sentence.english);
   const wordTokenMap: { token: string; wordIndex: number }[] = [];
   let wi = -1;
@@ -383,7 +376,6 @@ export default function SentenceCard({
     if (t.isWord) { wi++; wordTokenMap.push({ token: t.token, wordIndex: wi }); }
   });
 
-  // 熟語モードの単語選択（何語でも選択可能、再クリックで解除）
   const handlePhraseSelect = useCallback((wordIndex: number) => {
     setPhraseSelected((prev) => {
       if (prev.includes(wordIndex)) {
@@ -393,36 +385,34 @@ export default function SentenceCard({
     });
   }, []);
 
-  // 熟語モードキャンセル
   const cancelPhraseMode = () => {
     setPhraseSelecting(false);
     setPhraseSelected([]);
     setShowPhraseDialog(false);
   };
 
-  // 選択中の単語テキストを取得（wordIndex順）
   const getSelectedWords = (): string[] => {
     return phraseSelected
       .map((idx) => wordTokenMap.find((w) => w.wordIndex === idx)?.token ?? "")
       .filter(Boolean);
   };
 
-  // 熟語として登録（マーキングも同時に設定）
+  // 🌟 熟語として登録：語彙追加とマーキングを同時に行う
   const handleRegisterPhrase = (phraseText: string, definition: string, markType: WordMarkType | null) => {
-    // 語彙に熟語を追加
-    addVocabItem(weekId, articleId, sentenceIndex, {
+    // 語彙リストに追加
+    addVocabItems(weekId, articleId, sentenceIndex, [{
       word: phraseText.trim() || getSelectedWords().join(" "),
       definition,
       isPhrase: true,
       wordIndices: phraseSelected,
-    });
-    // マーキングを一括設定（addMarkedWordsで1回のstate更新にまとめる）
+    }]);
+
+    // マーキング設定
     if (markType) {
       const wordsToMark: MarkedWord[] = phraseSelected
         .map((idx) => {
           const found = wordTokenMap.find((w) => w.wordIndex === idx);
-          if (!found) return null;
-          return { word: found.token, markType, sentenceIndex, wordIndex: idx };
+          return found ? { word: found.token, markType, sentenceIndex, wordIndex: idx } : null;
         })
         .filter((x): x is MarkedWord => x !== null);
       if (wordsToMark.length > 0) {
@@ -433,26 +423,24 @@ export default function SentenceCard({
     setVocabOpen(true);
   };
 
-  // 個別に登録（各単語を別々のVocabItemとして追加、マーキングも一括設定）
+  // 🌟 個別に登録：複数単語を一括で安全に追加
   const handleRegisterIndividual = (markType: WordMarkType | null) => {
-    // 語彙を個別追加（各単語ごとにaddVocabItemを呼ぶ必要があるが、
-    // これはvocabulary配列への追加なので順番に呼んでも問題ない）
-    phraseSelected.forEach((idx) => {
-      const found = wordTokenMap.find((w) => w.wordIndex === idx);
-      if (!found) return;
-      addVocabItem(weekId, articleId, sentenceIndex, {
-        word: found.token,
-        definition: "",
-        isPhrase: false,
-      });
-    });
-    // マーキングは一括で設定（Reactのstate更新を1回にまとめる）
+    const newItems: VocabItem[] = phraseSelected
+      .map((idx) => {
+        const found = wordTokenMap.find((w) => w.wordIndex === idx);
+        return found ? { word: found.token, definition: "", isPhrase: false } : null;
+      })
+      .filter((x): x is VocabItem => x !== null);
+
+    if (newItems.length > 0) {
+      addVocabItems(weekId, articleId, sentenceIndex, newItems);
+    }
+
     if (markType) {
       const wordsToMark: MarkedWord[] = phraseSelected
         .map((idx) => {
           const found = wordTokenMap.find((w) => w.wordIndex === idx);
-          if (!found) return null;
-          return { word: found.token, markType, sentenceIndex, wordIndex: idx };
+          return found ? { word: found.token, markType, sentenceIndex, wordIndex: idx } : null;
         })
         .filter((x): x is MarkedWord => x !== null);
       if (wordsToMark.length > 0) {
@@ -463,7 +451,6 @@ export default function SentenceCard({
     setVocabOpen(true);
   };
 
-  // 語彙セクション
   const vocabSection = (
     <div>
       <div className="mt-2">
@@ -485,19 +472,17 @@ export default function SentenceCard({
                 onDelete={() => deleteVocabItem(weekId, articleId, sentenceIndex, i)}
               />
             ))}
-            <AddVocabRow onAdd={(item) => addVocabItem(weekId, articleId, sentenceIndex, item)} />
+            <AddVocabRow onAdd={(item) => addVocabItems(weekId, articleId, sentenceIndex, [item])} />
           </div>
         )}
       </div>
     </div>
   );
 
-  // レンダリング
   let renderWordIndex = -1;
 
   return (
     <div className="border-b border-border last:border-b-0 py-3">
-      {/* English sentence */}
       <p className="text-[15px] leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
         {tokens.map((item, i) => {
           if (!item.isWord) return <span key={i}>{item.token}</span>;
@@ -523,7 +508,6 @@ export default function SentenceCard({
         })}
       </p>
 
-      {/* 熟語モードバー */}
       <div className="mt-1.5 flex items-center gap-2 flex-wrap">
         {!phraseSelecting ? (
           <button
@@ -557,7 +541,6 @@ export default function SentenceCard({
         )}
       </div>
 
-      {/* 熟語確認ダイアログ */}
       {showPhraseDialog && phraseSelected.length >= 1 && (
         <PhraseConfirmDialog
           selectedWords={getSelectedWords()}
@@ -569,7 +552,6 @@ export default function SentenceCard({
         />
       )}
 
-      {/* Japanese translation toggle */}
       {hasTranslation && (
         <div className="mt-1.5">
           <button
@@ -594,7 +576,6 @@ export default function SentenceCard({
         </div>
       )}
 
-      {/* Vocab only (no translation) */}
       {!hasTranslation && (
         <div className="mt-1.5">{vocabSection}</div>
       )}
