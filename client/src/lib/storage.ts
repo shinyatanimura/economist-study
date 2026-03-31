@@ -1,13 +1,15 @@
 // ============================================================
-// The Economist Study App - LocalStorage 永続化ユーティリティ
-// Structure: Week → Article → Sentence (段落レベルは廃止)
-// 後方互換ポリシー: loadData時に不足フィールドをデフォルト値で補完
+// The Economist Study App - Firebase 永続化ユーティリティ
 // ============================================================
 
 import type { AppData, Week, Article, Sentence, MarkedWord, ReviewRecord, VocabItem, WordCheckMap } from "./types";
 import { nanoid } from "nanoid";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "./firebase"; // 先ほど作成した設定ファイル
 
 const STORAGE_KEY = "economist-study-data";
+// Firestoreでの保存先（"app_data"という場所の"my_economist_data"というファイルとして保存します）
+const docRef = doc(db, "app_data", "my_economist_data");
 
 // 既存データに不足フィールドを補完するマイグレーション
 function migrateData(raw: AppData): AppData {
@@ -34,19 +36,30 @@ function migrateData(raw: AppData): AppData {
   };
 }
 
-export function loadData(): AppData {
+// ★ 非同期でFirebaseからデータを読み込む
+export async function fetchCloudData(): Promise<AppData> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { weeks: [] };
-    return migrateData(JSON.parse(raw) as AppData);
-  } catch {
-    return { weeks: [] };
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return migrateData(snap.data() as AppData);
+    }
+  } catch (error) {
+    console.error("Firebaseからの読み込みエラー:", error);
+  }
+  return { weeks: [] };
+}
+
+// ★ 非同期でFirebaseにデータを保存する
+export async function saveCloudData(data: AppData): Promise<void> {
+  try {
+    await setDoc(docRef, data);
+  } catch (error) {
+    console.error("Firebaseへの保存エラー:", error);
   }
 }
 
-export function saveData(data: AppData): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
+// ---- Week operations ----
+// ※ここより下（addWeek など）は元のコードをそのまま残してください！
 
 // ---- Week operations ----
 
