@@ -14,6 +14,39 @@ import { Badge } from "@/components/ui/badge";
 import { useApp } from "@/contexts/AppContext";
 import type { Article } from "@/lib/types";
 
+// 🌟 ここから追加：英文と熟語テキストから、単語の場所を自動計算する関数
+function getWordIndicesForPhrase(sentenceText: string, phraseText: string): number[] {
+  const tokens = sentenceText.split(/(\s+|[^\w''-]+)/).filter((p) => p.length > 0);
+  let currentWordIndex = -1;
+  const wordTokens: { word: string; index: number }[] = [];
+  tokens.forEach((t) => {
+    if (/[\w''-]+/.test(t) && t.trim().length > 0) {
+      currentWordIndex++;
+      wordTokens.push({ word: t, index: currentWordIndex });
+    }
+  });
+
+  const pTokens = phraseText.split(/(\s+|[^\w''-]+)/).filter((p) => /[\w''-]+/.test(p) && p.trim().length > 0);
+  if (pTokens.length === 0) return [];
+
+  for (let i = 0; i <= wordTokens.length - pTokens.length; i++) {
+    let match = true;
+    for (let j = 0; j < pTokens.length; j++) {
+      const w1 = wordTokens[i + j].word.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const w2 = pTokens[j].toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (w1 !== w2) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      return wordTokens.slice(i, i + pTokens.length).map((w) => w.index);
+    }
+  }
+  return [];
+}
+// 🌟 ここまで追加
+
 interface WordEntry {
   // チェック状態管理のキー（熟語の場合は "phrase-{sentenceIndex}-{wordIndices.join('-')}"）
   key: string;
