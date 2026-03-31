@@ -91,11 +91,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const value: AppContextValue = {
     data,
     addWeek: (label, issueDate) => update(addWeek(data, label, issueDate)),
-// （これ以降の addWeek: ... などはそのまま残します）
-
-  const value: AppContextValue = {
-    data,
-    addWeek: (label, issueDate) => update(addWeek(data, label, issueDate)),
     updateWeek: (weekId, patch) => update(updateWeek(data, weekId, patch)),
     deleteWeek: (weekId) => update(deleteWeek(data, weekId)),
     addArticle: (weekId, title) => update(addArticle(data, weekId, title)),
