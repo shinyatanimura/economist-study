@@ -21,6 +21,17 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { useApp } from "@/contexts/AppContext";
 import type { Sentence, MarkedWord, VocabItem, WordMarkType } from "@/lib/types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 // ---- Token splitter ----
 function splitIntoTokens(text: string): { token: string; isWord: boolean }[] {
@@ -353,7 +364,7 @@ export default function SentenceCard({
   markedWords,
   onToggleWord,
 }: SentenceCardProps) {
-  const { addVocabItem, deleteVocabItem, updateVocabItem } = useApp();
+  const { addVocabItem, deleteVocabItem, updateVocabItem, addMarkedWords } = useApp();
   const [translationOpen, setTranslationOpen] = useState(false);
   const [vocabOpen, setVocabOpen] = useState(false);
 
@@ -405,26 +416,27 @@ export default function SentenceCard({
       isPhrase: true,
       wordIndices: phraseSelected,
     });
-    // マーキングを設定（各単語に同じmarkTypeを付与）
+    // マーキングを一括設定（addMarkedWordsで1回のstate更新にまとめる）
     if (markType) {
-      phraseSelected.forEach((idx) => {
-        const found = wordTokenMap.find((w) => w.wordIndex === idx);
-        if (!found) return;
-        const existing = markedWords.find(
-          (m) => m.sentenceIndex === sentenceIndex && m.wordIndex === idx
-        );
-        // 既にそのmarkTypeなら何もしない、なければ追加
-        if (!existing || existing.markType !== markType) {
-          onToggleWord({ word: found.token, markType, sentenceIndex, wordIndex: idx });
-        }
-      });
+      const wordsToMark: MarkedWord[] = phraseSelected
+        .map((idx) => {
+          const found = wordTokenMap.find((w) => w.wordIndex === idx);
+          if (!found) return null;
+          return { word: found.token, markType, sentenceIndex, wordIndex: idx };
+        })
+        .filter((x): x is MarkedWord => x !== null);
+      if (wordsToMark.length > 0) {
+        addMarkedWords(weekId, articleId, wordsToMark);
+      }
     }
     cancelPhraseMode();
     setVocabOpen(true);
   };
 
-  // 個別に登録（各単語を別々のVocabItemとして追加、マーキングも設定）
+  // 個別に登録（各単語を別々のVocabItemとして追加、マーキングも一括設定）
   const handleRegisterIndividual = (markType: WordMarkType | null) => {
+    // 語彙を個別追加（各単語ごとにaddVocabItemを呼ぶ必要があるが、
+    // これはvocabulary配列への追加なので順番に呼んでも問題ない）
     phraseSelected.forEach((idx) => {
       const found = wordTokenMap.find((w) => w.wordIndex === idx);
       if (!found) return;
@@ -433,15 +445,20 @@ export default function SentenceCard({
         definition: "",
         isPhrase: false,
       });
-      if (markType) {
-        const existing = markedWords.find(
-          (m) => m.sentenceIndex === sentenceIndex && m.wordIndex === idx
-        );
-        if (!existing || existing.markType !== markType) {
-          onToggleWord({ word: found.token, markType, sentenceIndex, wordIndex: idx });
-        }
-      }
     });
+    // マーキングは一括で設定（Reactのstate更新を1回にまとめる）
+    if (markType) {
+      const wordsToMark: MarkedWord[] = phraseSelected
+        .map((idx) => {
+          const found = wordTokenMap.find((w) => w.wordIndex === idx);
+          if (!found) return null;
+          return { word: found.token, markType, sentenceIndex, wordIndex: idx };
+        })
+        .filter((x): x is MarkedWord => x !== null);
+      if (wordsToMark.length > 0) {
+        addMarkedWords(weekId, articleId, wordsToMark);
+      }
+    }
     cancelPhraseMode();
     setVocabOpen(true);
   };

@@ -8,6 +8,17 @@ import { useState } from "react";
 import { Plus, BookOpen, RotateCcw, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -263,14 +274,34 @@ export default function ArticleView({ week, article }: ArticleViewProps) {
                   <Button variant="outline" size="sm" onClick={() => setInputOpen(true)} className="gap-1.5">
                     <Plus size={13} /> 文を追加
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1.5 text-muted-foreground hover:text-destructive"
-                    onClick={handleClearSentences}
-                  >
-                    <Trash2 size={13} /> 本文をクリア
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 size={13} /> 本文をクリア
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>本文をクリアしますか？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          この記事の全文を削除します。マーキングや語彙データもすべて消えます。この操作は元に戻せません。
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleClearSentences}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          削除する
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
             )}

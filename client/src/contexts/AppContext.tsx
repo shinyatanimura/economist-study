@@ -16,6 +16,7 @@ import {
   deleteArticle,
   setSentences,
   toggleMarkedWord,
+  addMarkedWords,
   addVocabItem,
   deleteVocabItem,
   updateVocabItem,
@@ -39,6 +40,7 @@ interface AppContextValue {
   setSentences: (weekId: string, articleId: string, sentences: Sentence[]) => void;
   // Marked words
   toggleMarkedWord: (weekId: string, articleId: string, word: MarkedWord) => void;
+  addMarkedWords: (weekId: string, articleId: string, words: MarkedWord[]) => void;
   // Vocabulary
   addVocabItem: (weekId: string, articleId: string, sentenceIndex: number, item: VocabItem) => void;
   deleteVocabItem: (weekId: string, articleId: string, sentenceIndex: number, vocabIndex: number) => void;
@@ -72,6 +74,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteArticle: (weekId, articleId) => update(deleteArticle(data, weekId, articleId)),
     setSentences: (weekId, articleId, sentences) => update(setSentences(data, weekId, articleId, sentences)),
     toggleMarkedWord: (weekId, articleId, word) => update(toggleMarkedWord(data, weekId, articleId, word)),
+    addMarkedWords: (weekId, articleId, words) => update(addMarkedWords(data, weekId, articleId, words)),
     addVocabItem: (weekId, articleId, sentenceIndex, item) => update(addVocabItem(data, weekId, articleId, sentenceIndex, item)),
     deleteVocabItem: (weekId, articleId, sentenceIndex, vocabIndex) => update(deleteVocabItem(data, weekId, articleId, sentenceIndex, vocabIndex)),
     updateVocabItem: (weekId, articleId, sentenceIndex, vocabIndex, item) => update(updateVocabItem(data, weekId, articleId, sentenceIndex, vocabIndex, item)),

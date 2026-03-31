@@ -160,6 +160,42 @@ export function toggleMarkedWord(
   };
 }
 
+// ---- Bulk mark words (熟語登録時に複数単語を一括でマーキング) ----
+// 既存マーキングを上書きせず、指定単語を強制的に指定markTypeに設定する
+export function addMarkedWords(
+  data: AppData,
+  weekId: string,
+  articleId: string,
+  words: MarkedWord[]
+): AppData {
+  return {
+    ...data,
+    weeks: data.weeks.map((w) =>
+      w.id === weekId
+        ? {
+            ...w,
+            articles: w.articles.map((a) => {
+              if (a.id !== articleId) return a;
+              // 既存リストをベースに、指定単語を追加または上書き
+              let updated = [...a.markedWords];
+              for (const word of words) {
+                const idx = updated.findIndex(
+                  (m) => m.sentenceIndex === word.sentenceIndex && m.wordIndex === word.wordIndex
+                );
+                if (idx === -1) {
+                  updated = [...updated, word];
+                } else {
+                  updated = updated.map((m, i) => (i === idx ? { ...m, markType: word.markType } : m));
+                }
+              }
+              return { ...a, markedWords: updated };
+            }),
+          }
+        : w
+    ),
+  };
+}
+
 // ---- Vocabulary operations ----
 
 export function addVocabItem(
