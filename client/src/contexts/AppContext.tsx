@@ -3,11 +3,12 @@
 // Structure: Week → Article → Sentence (段落レベルは廃止)
 // ============================================================
 
-import React, { createContext, useContext, useState, useCallback } from "react";
+// 冒頭をこのように書き換えてください
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import type { AppData, Week, Article, Sentence, MarkedWord, ReviewRecord, VocabItem } from "@/lib/types";
 import {
-  loadData,
-  saveData,
+  fetchCloudData, // 変更
+  saveCloudData,  // 変更
   addWeek,
   updateWeek,
   deleteWeek,
@@ -26,6 +27,7 @@ import {
   deleteReviewRecord,
 } from "@/lib/storage";
 
+// （これ以降の interface AppContextValue { ... } はそのまま残します）
 interface AppContextValue {
   data: AppData;
   // Week
@@ -57,12 +59,39 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<AppData>(() => loadData());
+  // 初期値は空のデータをセットし、ローディング状態を追加
+  const [data, setData] = useState<AppData>({ weeks: [] });
+  const [loading, setLoading] = useState(true);
 
+  // ★ アプリ起動時に1回だけFirebaseからデータを取得する
+  useEffect(() => {
+    fetchCloudData().then((cloudData) => {
+      setData(cloudData);
+      setLoading(false); // 読み込み完了
+    });
+  }, []);
+
+  // ★ データが更新されるたびにFirebaseに保存する
   const update = useCallback((newData: AppData) => {
     setData(newData);
-    saveData(newData);
+    saveCloudData(newData);
   }, []);
+
+  // ★ クラウドからの読み込み中画面
+  if (loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
+        <p className="text-muted-foreground text-sm" style={{ fontFamily: "var(--font-ui)" }}>
+          クラウドと同期中...
+        </p>
+      </div>
+    );
+  }
+
+  const value: AppContextValue = {
+    data,
+    addWeek: (label, issueDate) => update(addWeek(data, label, issueDate)),
+// （これ以降の addWeek: ... などはそのまま残します）
 
   const value: AppContextValue = {
     data,
