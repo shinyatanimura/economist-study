@@ -239,6 +239,37 @@ export function addVocabItem(
   };
 }
 
+// client/src/lib/storage.ts
+
+// --- 既存の addVocabItem の下あたりに追加 ---
+export function addVocabItems(
+  data: AppData,
+  weekId: string,
+  articleId: string,
+  sentenceIndex: number,
+  items: VocabItem[]
+): AppData {
+  return {
+    ...data,
+    weeks: data.weeks.map((w) =>
+      w.id === weekId
+        ? {
+            ...w,
+            articles: w.articles.map((a) => {
+              if (a.id !== articleId) return a;
+              const sentences = a.sentences.map((s, i) =>
+                i === sentenceIndex
+                  ? { ...s, vocabulary: [...s.vocabulary, ...items] }
+                  : s
+              );
+              return { ...a, sentences };
+            }),
+          }
+        : w
+    ),
+  };
+}
+
 export function deleteVocabItem(
   data: AppData,
   weekId: string,
